@@ -1,3 +1,9 @@
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.append(str(PROJECT_ROOT))
+
 from finance_tools import (
     read_stock_price_data,
     calculate_stock_metrics,

@@ -42,13 +42,21 @@ def format_response(route_result: dict) -> str:
 
     if selected_tool == "generate_stock_metrics_report":
         return format_stock_report_generation_response(tool_result)
+    
     if selected_tool == "run_moving_average_backtest":
         return format_backtest_response(tool_result)
+    
+    if selected_tool == "generate_backtest_charts":
+        return format_backtest_charts_response(tool_result)
 
     if selected_tool == "generate_backtest_report":
         return format_backtest_report_generation_response(tool_result)
+    
     if selected_tool == "optimize_moving_average_parameters":
         return format_parameter_scan_response(tool_result)
+   
+    if selected_tool == "generate_parameter_scan_chart":
+        return format_parameter_scan_chart_response(tool_result)
 
     if selected_tool == "generate_parameter_scan_report":
         return format_parameter_scan_report_generation_response(tool_result)
@@ -449,7 +457,6 @@ Top 3 参数组合：
 注意：参数扫描容易产生样本内过拟合，当前结果只能说明这些参数在当前样本区间内表现较好，不能直接代表未来有效。真实策略研究中需要样本外测试、滚动窗口验证和交易成本约束。
 """
 
-
 def format_parameter_scan_report_generation_response(tool_result: dict) -> str:
 
     """
@@ -514,4 +521,44 @@ def format_strategy_research_summary_response(tool_result: dict) -> str:
 {summary.get("final_suggestion")}
 
 你可以打开该 Markdown 文件查看完整策略研究总结。
+"""
+
+def format_backtest_charts_response(tool_result: dict) -> str:
+    """
+    格式化回测图表生成结果。
+    """
+    return f"""回测图表已生成。
+
+图表路径：
+
+- 策略净值曲线：{tool_result.get("nav_chart_path")}
+- 策略回撤曲线：{tool_result.get("drawdown_chart_path")}
+
+策略参数：
+
+- 短期均线窗口：{tool_result.get("short_window")}
+- 长期均线窗口：{tool_result.get("long_window")}
+
+你可以打开图片文件查看策略净值和回撤表现。
+"""
+
+def format_parameter_scan_chart_response(tool_result: dict) -> str:
+    """
+    格式化参数扫描图表生成结果。
+    """
+    return f"""参数扫描图表已生成。
+
+图表路径：
+
+{tool_result.get("chart_path")}
+
+排序指标：
+
+{tool_result.get("sort_by")}
+
+本次图表包含参数组合数量：
+
+{tool_result.get("total_combinations")}
+
+你可以打开图片文件查看不同均线参数组合的表现对比。
 """

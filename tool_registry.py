@@ -11,9 +11,11 @@ from finance_tools import (
     generate_stock_metrics_report,
     run_moving_average_backtest,
     generate_backtest_report,
+    generate_backtest_charts,
     optimize_moving_average_parameters,
     generate_parameter_scan_report,
-    generate_strategy_research_summary
+    generate_parameter_scan_chart,
+    generate_strategy_research_summary,
 )
 
 
@@ -35,6 +37,14 @@ TOOL_REGISTRY = [
         "handler": generate_strategy_research_summary
     },
     {
+        "name": "generate_parameter_scan_chart",
+        "description": "生成均线参数扫描图表，用于对比不同 MA 参数组合在夏普比率、策略收益率、超额收益或最大回撤等指标上的表现。",
+        "keywords": ["参数扫描图表", "扫描图表", "参数对比图", "均线参数图表", "生成参数图表", "生成扫描图表"],
+        "required_file_type": "stock_price",
+        "required_file_type_name": "股票价格数据",
+        "handler": generate_parameter_scan_chart
+    },
+    {
         "name": "generate_parameter_scan_report",
         "description": "批量扫描多组均线策略参数，并生成参数扫描对比报告。",
         "keywords": ["参数扫描报告", "参数优化报告", "生成参数扫描报告", "生成参数优化报告"],
@@ -49,6 +59,14 @@ TOOL_REGISTRY = [
         "required_file_type": "stock_price",
         "required_file_type_name": "股票价格数据",
         "handler": optimize_moving_average_parameters
+    },
+    {
+        "name": "generate_backtest_charts",
+        "description": "生成均线策略回测图表，包括策略净值曲线和策略回撤曲线。",
+        "keywords": ["回测图表", "净值曲线", "回撤曲线", "生成图表", "策略图表", "生成回测图表"],
+        "required_file_type": "stock_price",
+        "required_file_type_name": "股票价格数据",
+        "handler": generate_backtest_charts
     },
     {
         "name": "generate_backtest_report",
