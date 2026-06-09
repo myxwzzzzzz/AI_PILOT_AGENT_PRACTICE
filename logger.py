@@ -1,9 +1,8 @@
 import json
 from datetime import datetime
 from pathlib import Path
+from config import LOG_DIR
 
-
-LOG_DIR = Path("data/logs")
 LOG_FILE = LOG_DIR / "tool_calls.jsonl"
 
 

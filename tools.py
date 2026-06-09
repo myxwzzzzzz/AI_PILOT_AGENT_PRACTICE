@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+from config import REPORT_DIR
 
 def format_percent(value: float) -> str:
     """
@@ -173,11 +174,14 @@ def analyze_channel_conversion(file_path: str) -> dict:
 
 def generate_channel_analysis_report(
     file_path: str,
-    output_path: str = "data/channel_analysis_report.md"
+     output_path: str | None = None
 ) -> dict:
     """
     基于渠道转化率分析结果，自动生成 Markdown 分析报告。
     """
+    if output_path is None:
+        output_path = str(REPORT_DIR / "channel_analysis_report.md")
+
     analysis_result = analyze_channel_conversion(file_path)
 
     if not analysis_result.get("success"):

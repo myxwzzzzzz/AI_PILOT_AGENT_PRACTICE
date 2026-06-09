@@ -1,5 +1,7 @@
 import os
 
+from config import ensure_output_dirs
+
 from file_inspector import describe_file_type
 from router import route_task
 from response_formatter import format_response
@@ -83,6 +85,8 @@ def print_recent_logs(limit: int = 5) -> None:
 
 
 def main():
+    ensure_output_dirs()
+    
     current_file_path = "data/channel_data.csv"
     show_trace = False
 
@@ -109,6 +113,8 @@ def main():
     print("16. 扫描均线参数")
     print("17. 生成参数扫描报告")
     print("18. 生成策略研究总结报告")
+    print("19. 生成 MA5-MA10 回测图表")
+    print("20. 生成参数扫描图表")
     print()
     print("输入 exit、quit 或 退出 可以结束程序")
     print("=" * 80)

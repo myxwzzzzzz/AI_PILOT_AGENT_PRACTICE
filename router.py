@@ -235,7 +235,8 @@ def route_task(user_input: str, file_path: str) -> dict:
         # 对均线回测类工具，尝试从用户输入中提取 MA 参数
         if matched_tool["name"] in [
             "run_moving_average_backtest",
-            "generate_backtest_report"
+            "generate_backtest_report",
+            "generate_backtest_charts"
         ]:
             ma_params = extract_ma_windows(user_input)
 
@@ -265,7 +266,8 @@ def route_task(user_input: str, file_path: str) -> dict:
         # 对参数扫描类工具，尝试从用户输入中提取排序指标
         if matched_tool["name"] in [
             "optimize_moving_average_parameters",
-            "generate_parameter_scan_report"
+            "generate_parameter_scan_report",
+            "generate_parameter_scan_chart",
             "generate_strategy_research_summary"
         ]:
              sort_params = extract_scan_sort_by(user_input)

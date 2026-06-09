@@ -1,7 +1,9 @@
 import os
 import math
 import pandas as pd
-
+from config import REPORT_DIR, CHART_DIR,ensure_output_dirs
+import matplotlib.pyplot as plt
+from pathlib import Path
 
 def format_percent(value: float) -> str:
     """
@@ -159,11 +161,15 @@ def calculate_stock_metrics(file_path: str, risk_free_rate: float = 0.0) -> dict
 
 def generate_stock_metrics_report(
     file_path: str,
-    output_path: str = "data/stock_metrics_report.md"
+    output_path: str | None = None
 ) -> dict:
     """
     基于股票价格数据，生成 Markdown 风险收益分析报告。
     """
+    if output_path is None:
+        output_path = str(REPORT_DIR / "stock_metrics_report.md")
+
+
     metrics_result = calculate_stock_metrics(file_path)
 
     if not metrics_result.get("success"):
@@ -408,13 +414,16 @@ def run_moving_average_backtest(
 
 def generate_backtest_report(
     file_path: str,
-    output_path: str = "data/backtest_report.md",
+    output_path: str | None = None,
     short_window: int = 3,
     long_window: int = 5
 ) -> dict:
     """
     生成均线策略回测 Markdown 报告。
     """
+    if output_path is None:
+        output_path = str(REPORT_DIR / f"backtest_report_MA{short_window}_MA{long_window}.md")
+    
     backtest_result = run_moving_average_backtest(
         file_path=file_path,
         short_window=short_window,
@@ -426,6 +435,11 @@ def generate_backtest_report(
             "success": False,
             "error": backtest_result.get("error", "回测失败")
         }
+    chart_result = generate_backtest_charts(
+        file_path=file_path,
+        short_window=short_window,
+        long_window=long_window
+    )
 
     sharpe_ratio = backtest_result.get("sharpe_ratio")
     sharpe_text = "无法计算" if sharpe_ratio is None else f"{sharpe_ratio:.4f}"
@@ -454,6 +468,34 @@ def generate_backtest_report(
         )
 
     recent_table = "\n".join(recent_rows)
+
+    chart_section = ""
+
+    if chart_result.get("success"):
+        nav_chart_path = f"../charts/backtest_nav_MA{short_window}_MA{long_window}.png"
+        drawdown_chart_path = f"../charts/backtest_drawdown_MA{short_window}_MA{long_window}.png"
+
+        chart_section = f"""
+---
+
+## 5. 回测图表
+
+### 5.1 策略净值 vs 买入持有净值
+
+![策略净值曲线]({nav_chart_path})
+
+### 5.2 策略回撤曲线
+
+![策略回撤曲线]({drawdown_chart_path})
+"""
+    else:
+        chart_section = f"""
+---
+
+## 5. 回测图表
+
+图表生成失败：{chart_result.get("error")}
+"""
 
     report_content = f"""# 均线策略回测报告
 
@@ -501,9 +543,10 @@ def generate_backtest_report(
 |---|---:|---:|---:|---:|---:|---:|---:|
 {recent_table}
 
+{chart_section}
 ---
 
-## 5. 初步结论
+## 6. 初步结论
 
 {performance_comment}
 
@@ -511,7 +554,7 @@ def generate_backtest_report(
 
 ---
 
-## 6. 局限性说明
+## 7. 局限性说明
 
 1. 当前策略只是简单均线规则，不代表真实投资建议；
 2. 当前回测未考虑交易手续费、滑点、冲击成本；
@@ -528,6 +571,7 @@ def generate_backtest_report(
             "success": True,
             "message": f"回测报告已生成：{output_path}",
             "output_path": output_path,
+            "chart_result": chart_result,
             "summary": {
                 "strategy_name": backtest_result["strategy_name"],
                 "strategy_total_return": backtest_result["strategy_total_return"],
@@ -655,12 +699,16 @@ def optimize_moving_average_parameters(
 
 def generate_parameter_scan_report(
     file_path: str,
-    output_path: str = "data/parameter_scan_report.md",
+    output_path: str | None = None,
     sort_by: str = "sharpe_ratio"
 ) -> dict:
     """
     生成均线策略参数扫描 Markdown 报告。
     """
+    if output_path is None:
+        output_path = str(REPORT_DIR / f"parameter_scan_report_{sort_by}.md")
+
+
     scan_result = optimize_moving_average_parameters(
         file_path=file_path,
         sort_by=sort_by
@@ -671,6 +719,11 @@ def generate_parameter_scan_report(
             "success": False,
             "error": scan_result.get("error", "参数扫描失败")
         }
+    
+    chart_result=generate_parameter_scan_chart(
+        file_path=file_path,
+        sort_by=sort_by
+    )
 
     best_result = scan_result["best_result"]
     all_results = scan_result["all_results"]
@@ -716,7 +769,27 @@ def generate_parameter_scan_report(
         risk_comment = "最佳参数组合的最大回撤仍然偏高，需要进一步加入风控规则。"
     else:
         risk_comment = "最佳参数组合的最大回撤相对可控，但仍需更长周期数据验证稳定性。"
+    
+    chart_section = ""
 
+    if chart_result.get("success"):
+        chart_path = f"../charts/parameter_scan_{sort_by}.png"
+
+        chart_section = f"""
+---
+
+## 参数扫描图表
+
+![参数扫描图表]({chart_path})
+"""
+    else:
+        chart_section = f"""
+---
+
+## 参数扫描图表
+
+图表生成失败：{chart_result.get("error")}
+"""
     report_content = f"""# 均线策略参数扫描报告
 
 ## 1. 扫描目标
@@ -755,6 +828,7 @@ def generate_parameter_scan_report(
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---|
 {table_content}
 
+{chart_section}
 ---
 
 ## 4. 初步结论
@@ -800,7 +874,7 @@ def generate_parameter_scan_report(
     
 def generate_strategy_research_summary(
     file_path: str,
-    output_path: str = "data/strategy_research_summary.md",
+    output_path: str | None = None,
     sort_by: str = "sharpe_ratio"
 ) -> dict:
     """
@@ -813,6 +887,10 @@ def generate_strategy_research_summary(
     - 策略表现判断
     - 风险提示和后续优化建议
     """
+    if output_path is None:
+        output_path = str(REPORT_DIR / f"strategy_research_summary_{sort_by}.md")
+    
+
     metrics_result = calculate_stock_metrics(file_path)
     if not metrics_result.get("success"):
         return {
@@ -842,7 +920,42 @@ def generate_strategy_research_summary(
         }
 
     best_result = scan_result["best_result"]
+    best_short_window= best_result["short_window"]
+    best_long_window = best_result["long_window"]
 
+    chart_result = generate_backtest_charts(
+        file_path=file_path,
+        short_window=best_short_window,
+        long_window=best_long_window
+    )
+
+    chart_section=""
+
+    if chart_result.get("success"):
+        nav_chart_path = f"../charts/backtest_nav_MA{best_short_window}_MA{best_long_window}.png"
+        drawdown_chart_path = f"../charts/backtest_drawdown_MA{best_short_window}_MA{best_long_window}.png"
+
+        chart_section = f"""
+---
+## 6. 策略图表
+
+### 6.1 最佳策略净值 vs 买入持有净值
+
+![最佳策略净值曲线]({nav_chart_path})
+
+### 6.2 最佳策略回撤曲线
+
+![最佳策略回撤曲线]({drawdown_chart_path})
+"""
+    else:
+        chart_section = f"""
+---
+
+## 6. 策略图表
+
+图表生成失败：{chart_result.get("error")}
+"""
+        
     sort_by_name_mapping = {
         "sharpe_ratio": "夏普比率",
         "strategy_total_return": "策略收益率",
@@ -1001,6 +1114,8 @@ def generate_strategy_research_summary(
 5. 增加止损、止盈和仓位控制；
 6. 对比基准指数和行业指数；
 7. 让 Agent 自动生成策略优化建议和实验记录。
+
+{chart_section}
 """
 
     try:
@@ -1011,6 +1126,7 @@ def generate_strategy_research_summary(
             "success": True,
             "message": f"策略研究总结报告已生成：{output_path}",
             "output_path": output_path,
+            "chart_result": chart_result,
             "summary": {
                 "sort_by": sort_by,
                 "asset_total_return": metrics_result["total_return"],
@@ -1023,6 +1139,237 @@ def generate_strategy_research_summary(
                 "best_sharpe_ratio": best_result["sharpe_ratio"],
                 "final_suggestion": final_suggestion
             }
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+def generate_backtest_charts(
+    file_path: str,
+    output_dir: str | None = None,
+    short_window: int = 3,
+    long_window: int = 5
+) -> dict:
+    """
+    生成均线策略回测图表。
+
+    输出：
+    - 策略净值 vs 买入持有净值曲线
+    - 策略回撤曲线
+    """
+    ensure_output_dirs()
+
+    if output_dir is None:
+        output_dir = str(CHART_DIR)
+
+    if not os.path.exists(file_path):
+        return {
+            "success": False,
+            "error": f"文件不存在：{file_path}"
+        }
+
+    try:
+        if short_window <= 0 or long_window <= 0:
+            return {
+                "success": False,
+                "error": "均线窗口必须为正整数"
+            }
+
+        if short_window >= long_window:
+            return {
+                "success": False,
+                "error": "短期均线窗口必须小于长期均线窗口"
+            }
+
+        df = pd.read_csv(file_path)
+
+        required_columns = ["date", "close"]
+        missing_columns = [col for col in required_columns if col not in df.columns]
+
+        if missing_columns:
+            return {
+                "success": False,
+                "error": f"缺少必要字段：{missing_columns}"
+            }
+
+        df["date"] = pd.to_datetime(df["date"])
+        df = df.sort_values("date").reset_index(drop=True)
+
+        if len(df) < long_window + 2:
+            return {
+                "success": False,
+                "error": f"数据量不足，至少需要 {long_window + 2} 条价格数据"
+            }
+
+        df["daily_return"] = df["close"].pct_change().fillna(0)
+
+        short_ma_col = f"ma_{short_window}"
+        long_ma_col = f"ma_{long_window}"
+
+        df[short_ma_col] = df["close"].rolling(window=short_window).mean()
+        df[long_ma_col] = df["close"].rolling(window=long_window).mean()
+
+        # 生成信号：短期均线 > 长期均线时持仓
+        df["signal"] = (df[short_ma_col] > df[long_ma_col]).astype(int)
+
+        # 信号延后一日生效，避免未来函数
+        df["position"] = df["signal"].shift(1).fillna(0)
+
+        df["strategy_return"] = df["position"] * df["daily_return"]
+
+        df["strategy_value"] = (1 + df["strategy_return"]).cumprod()
+        df["benchmark_value"] = (1 + df["daily_return"]).cumprod()
+
+        df["strategy_running_max"] = df["strategy_value"].cummax()
+        df["strategy_drawdown"] = df["strategy_value"] / df["strategy_running_max"] - 1
+
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        nav_chart_path = output_path / f"backtest_nav_MA{short_window}_MA{long_window}.png"
+        drawdown_chart_path = output_path / f"backtest_drawdown_MA{short_window}_MA{long_window}.png"
+
+        # 图 1：策略净值 vs 买入持有净值
+        plt.figure(figsize=(10, 5))
+        plt.plot(df["date"], df["strategy_value"], label="Strategy NAV")
+        plt.plot(df["date"], df["benchmark_value"], label="Buy and Hold")
+        plt.title(f"MA{short_window}-MA{long_window} Strategy NAV vs Benchmark")
+        plt.xlabel("Date")
+        plt.ylabel("Net Value")
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(nav_chart_path, dpi=150)
+        plt.close()
+
+        # 图 2：策略回撤曲线
+        plt.figure(figsize=(10, 5))
+        plt.plot(df["date"], df["strategy_drawdown"], label="Strategy Drawdown")
+        plt.title(f"MA{short_window}-MA{long_window} Strategy Drawdown")
+        plt.xlabel("Date")
+        plt.ylabel("Drawdown")
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(drawdown_chart_path, dpi=150)
+        plt.close()
+
+        return {
+            "success": True,
+            "message": "回测图表已生成",
+            "nav_chart_path": str(nav_chart_path),
+            "drawdown_chart_path": str(drawdown_chart_path),
+            "short_window": short_window,
+            "long_window": long_window
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+    
+def generate_parameter_scan_chart(
+    file_path: str,
+    output_dir: str | None = None,
+    sort_by: str = "sharpe_ratio"
+) -> dict:
+    """
+    生成均线参数扫描结果对比图。
+
+    当前版本先生成一张柱状图：
+    - 不同 MA 参数组合在指定排序指标上的表现对比
+    """
+    ensure_output_dirs()
+
+    if output_dir is None:
+        output_dir = str(CHART_DIR)
+
+    try:
+        scan_result = optimize_moving_average_parameters(
+            file_path=file_path,
+            sort_by=sort_by
+        )
+
+        if not scan_result.get("success"):
+            return {
+                "success": False,
+                "error": scan_result.get("error", "参数扫描失败")
+            }
+
+        results = (
+            scan_result.get("results")
+            or scan_result.get("all_results")
+            or scan_result.get("top_results")
+        )
+
+        if not results:
+            return {
+                "success": False,
+                "error": "参数扫描结果为空，无法生成图表"
+            }
+
+        chart_data = []
+
+        for item in results:
+            short_window = item.get("short_window")
+            long_window = item.get("long_window")
+            metric_value = item.get(sort_by)
+
+            if short_window is None or long_window is None:
+                continue
+
+            if metric_value is None:
+                continue
+
+            chart_data.append({
+                "label": f"MA{short_window}-MA{long_window}",
+                "value": metric_value
+            })
+
+        if not chart_data:
+            return {
+                "success": False,
+                "error": f"没有可用于绘图的 {sort_by} 数据"
+            }
+
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        chart_path = output_path / f"parameter_scan_{sort_by}.png"
+
+        labels = [item["label"] for item in chart_data]
+        values = [item["value"] for item in chart_data]
+
+        metric_name_map = {
+            "sharpe_ratio": "Sharpe Ratio",
+            "strategy_total_return": "Strategy Total Return",
+            "excess_return": "Excess Return",
+            "max_drawdown": "Max Drawdown"
+        }
+
+        metric_name = metric_name_map.get(sort_by, sort_by)
+
+        plt.figure(figsize=(10, 5))
+        plt.bar(labels, values)
+        plt.title(f"Parameter Scan Comparison by {metric_name}")
+        plt.xlabel("MA Parameter")
+        plt.ylabel(metric_name)
+        plt.xticks(rotation=45, ha="right")
+        plt.grid(axis="y")
+        plt.tight_layout()
+        plt.savefig(chart_path, dpi=150)
+        plt.close()
+
+        return {
+            "success": True,
+            "message": "参数扫描图表已生成",
+            "chart_path": str(chart_path),
+            "sort_by": sort_by,
+            "total_combinations": len(chart_data)
         }
 
     except Exception as e:

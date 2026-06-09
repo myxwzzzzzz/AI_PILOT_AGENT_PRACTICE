@@ -1,0 +1,36 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+data/logs/*.jsonl
+
+# Generated reports
+data/output/reports/*.md
+
+# Generated charts
+data/output/charts/*.png
+
+# Old generated reports
+data/*_report.md
+data/strategy_research_summary.md
+
+# Archived reports
+data/archive_reports/
+
+# Keep output folders
+!data/output/reports/.gitkeep
+!data/output/charts/.gitkeep
