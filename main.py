@@ -8,6 +8,13 @@ from response_formatter import format_response
 from logger import write_tool_log, read_recent_logs
 from tool_registry import list_available_tools
 from trace_formatter import format_trace
+from llm_tool_selector import select_tool
+from llm_router import route_llm_tool_call
+from llm_agent_runner import run_llm_agent_task
+from llm_health_check import (
+    check_deepseek_connection,
+    format_llm_health_check_result,
+)
 
 def print_available_tools() -> None:
     """
@@ -89,6 +96,9 @@ def main():
     
     current_file_path = "data/channel_data.csv"
     show_trace = False
+    use_llm_mode = False
+    llm_selector_mode = "mock"
+    use_rag_mode = False
 
     print("=" * 80)
     print("AI Pilot 数据分析助手已启动")
@@ -115,6 +125,8 @@ def main():
     print("18. 生成策略研究总结报告")
     print("19. 生成 MA5-MA10 回测图表")
     print("20. 生成参数扫描图表")
+    print("输入 开启LLM模式，可以使用模拟 LLM Tool Calling 路由")
+    print("输入 关闭LLM模式，可以恢复规则路由")
     print()
     print("输入 exit、quit 或 退出 可以结束程序")
     print("=" * 80)
@@ -131,6 +143,36 @@ def main():
             print_recent_logs(limit=5)
             continue
 
+        if user_input in ["开启LLM模式", "开启 LLM 模式", "打开LLM模式", "打开 LLM 模式"]:
+            use_llm_mode = True
+            print("\n已开启 LLM 模式。后续任务将走 mock_llm_tool_selector → llm_router。")
+            continue
+
+        if user_input in ["关闭LLM模式", "关闭 LLM 模式", "退出LLM模式", "退出 LLM 模式"]:
+            use_llm_mode = False
+            print("\n已关闭 LLM 模式。后续任务将恢复使用规则 router。")
+            continue
+
+        if user_input in ["使用Mock LLM", "使用mock LLM", "使用模拟LLM", "使用模拟 LLM"]:
+            llm_selector_mode = "mock"
+            print("\n已切换为 mock LLM selector。")
+            continue
+
+        if user_input in ["使用真实LLM", "使用真实 LLM", "使用Real LLM", "使用real LLM"]:
+            llm_selector_mode = "real"
+            print("\n已切换为 real LLM selector。后续任务会调用deepseek来完成。")
+            continue
+
+        if user_input in ["开启RAG模式", "开启 RAG 模式", "打开RAG模式", "打开 RAG 模式"]:
+            use_rag_mode = True
+            print("\n已开启 RAG 模式。后续 LLM 模式会检索 documents/ 中的相关知识片段。")
+            continue
+
+        if user_input in ["关闭RAG模式", "关闭 RAG 模式", "退出RAG模式", "退出 RAG 模式"]:
+            use_rag_mode = False
+            print("\n已关闭 RAG 模式。")
+            continue
+
         if user_input in ["查看工具", "工具列表", "可用工具"]:
             print_available_tools()
             continue
@@ -139,6 +181,11 @@ def main():
             show_trace = True
             print("\nAI 助手回复：")
             print("已开启工具调用轨迹显示。")
+            continue
+
+        if user_input in ["检查LLM连接", "检查 LLM 连接", "测试LLM连接", "测试 LLM 连接"]:
+            result = check_deepseek_connection()
+            print(format_llm_health_check_result(result))
             continue
 
         if user_input in ["关闭轨迹", "隐藏轨迹", "关掉轨迹"]:
@@ -166,18 +213,37 @@ def main():
             print(f"已切换当前数据文件为：{current_file_path}")
             print(describe_file_type(current_file_path))
             continue
+        
 
         # 普通任务：路由 → 工具执行 → 格式化回复 → 写日志
-        route_result = route_task(user_input, current_file_path)
+
+        print(f"[DEBUG] use_llm_mode={use_llm_mode}, llm_selector_mode={llm_selector_mode}, use_rag_mode={use_rag_mode}")
+        
+        if use_llm_mode:
+            route_result = run_llm_agent_task(
+                user_input=user_input,
+                file_path=current_file_path,
+                selector_mode=llm_selector_mode,
+                fallback_to_mock=True,
+                fallback_to_rule=True,
+                use_rag=use_rag_mode,
+                rag_top_k=3,
+            )
+        else:
+            route_result = route_task(user_input, current_file_path)
+
         response = format_response(route_result)
 
-        write_tool_log(user_input, current_file_path, route_result)
+        write_tool_log(
+            user_input=user_input,
+            file_path=current_file_path,
+            route_result=route_result,
+        )
 
         print("\nAI 助手回复：")
         print(response)
 
         if show_trace:
-            print("\n" + "-" * 80)
             print(format_trace(route_result))
 
 

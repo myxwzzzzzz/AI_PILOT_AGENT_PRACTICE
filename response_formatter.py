@@ -9,6 +9,25 @@ def format_response(route_result: dict) -> str:
     """
     将路由器返回的工具结果，格式化为自然语言回答。
     """
+    if route_result.get("answer_type") == "rag_qa":
+        answer = route_result.get("answer", "")
+
+        sources = route_result.get("retrieved_chunks", [])
+        source_lines = []
+
+        for chunk in sources:
+            source_lines.append(
+                f"- {chunk.get('chunk_id')}（score={chunk.get('score')}，source={chunk.get('source')}）"
+            )
+
+        if source_lines:
+            return (
+                f"{answer}\n\n"
+                "参考的本地知识片段：\n"
+                + "\n".join(source_lines)
+            )
+
+        return answer
     if not route_result.get("success"):
         error = route_result.get("error", "任务执行失败")
         suggestion = route_result.get("suggestion", "")

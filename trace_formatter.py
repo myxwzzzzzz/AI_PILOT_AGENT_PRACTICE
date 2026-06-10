@@ -4,6 +4,85 @@ def format_trace(route_result: dict) -> str:
     """
     trace = route_result.get("trace")
 
+    if trace.get("router_type") == "rag_qa":
+        lines = []
+        lines.append("\n工具调用轨迹：")
+        lines.append("- 路由类型：RAG 知识问答模式")
+        lines.append(f"- 意图类型：{trace.get('intent_type')}")
+        lines.append(f"- 用户输入：{trace.get('user_input')}")
+        lines.append(f"- Selector 模式：{trace.get('selector_mode')}")
+        lines.append(f"- LLM 判断原因：{trace.get('llm_reason')}")
+        lines.append(f"- 是否启用 RAG：{trace.get('use_rag')}")
+        lines.append(f"- RAG 回答来源：{trace.get('rag_answer_source')}")
+
+        llm_answer_result = trace.get("llm_answer_result")
+        if llm_answer_result:
+            lines.append(f"- RAG LLM 供应商：{llm_answer_result.get('provider')}")
+            lines.append(f"- RAG LLM 模型：{llm_answer_result.get('model')}")
+            lines.append(f"- RAG LLM 阶段：{llm_answer_result.get('stage')}")
+            if llm_answer_result.get("elapsed_seconds") is not None:
+                lines.append(f"- RAG LLM 耗时：{llm_answer_result.get('elapsed_seconds')} 秒")
+            if not llm_answer_result.get("success"):
+                lines.append(f"- RAG LLM 失败原因：{llm_answer_result.get('message')}")
+
+        retrieved_chunks = trace.get("retrieved_chunks", [])
+        if retrieved_chunks:
+            lines.append("- RAG 检索片段：")
+            for chunk in retrieved_chunks:
+                lines.append(
+                    f"  - {chunk.get('chunk_id')} | score={chunk.get('score')} | source={chunk.get('source')}"
+                )
+
+        lines.append(f"- 是否使用 fallback：{trace.get('fallback_used')}")
+        lines.append(f"- fallback 步骤：{trace.get('fallback_steps')}")
+
+        return "\n".join(lines)
+
+    if trace.get("router_type") == "llm_router":
+        llm_tool_call = trace.get("llm_tool_call", {}) or {}
+
+        lines = []
+        lines.append("\n工具调用轨迹：")
+        lines.append("- 路由类型：LLM Tool Calling 模式")
+        lines.append(f"- 意图类型：{llm_tool_call.get('intent_type')}")
+        lines.append(f"- Selector 模式：{trace.get('selector_mode') or llm_tool_call.get('selector_mode')}")
+        trace["use_rag"] = llm_tool_call.get("use_rag", False)
+        trace["retrieved_chunks"] = llm_tool_call.get("retrieved_chunks", [])
+        lines.append(f"- 模型供应商：{llm_tool_call.get('provider')}")
+        lines.append(f"- 模型名称：{llm_tool_call.get('model')}")
+        lines.append(f"- 用户输入：{trace.get('user_input')}")
+        lines.append(f"- LLM 选择工具：{trace.get('selected_tool')}")
+        lines.append(f"- LLM 生成参数：{llm_tool_call.get('arguments')}")
+        lines.append(f"- LLM 选择原因：{trace.get('llm_reason') or llm_tool_call.get('reason')}")
+
+        raw_response = llm_tool_call.get("raw_response")
+        if raw_response:
+            lines.append(f"- LLM 原始 JSON：{raw_response}")
+        
+        retrieved_chunks = trace.get("retrieved_chunks", [])
+        if retrieved_chunks:
+            lines.append("- RAG 检索片段：")
+            for chunk in retrieved_chunks:
+                lines.append(
+                   f"  - {chunk.get('chunk_id')} | score={chunk.get('score')} | source={chunk.get('source')}"
+                )
+
+        current_file_info = llm_tool_call.get("current_file_info", {})
+        if current_file_info:
+            lines.append(f"- Selector 看到的文件类型：{current_file_info.get('file_type')}")
+            lines.append(f"- Selector 看到的字段：{current_file_info.get('columns')}")
+
+        lines.append(f"- 当前文件：{trace.get('current_file')}")
+        lines.append(f"- 当前文件类型：{trace.get('current_file_type')}")
+        lines.append(f"- 工具要求文件类型：{trace.get('required_file_type')}")
+        lines.append(f"- 文件类型校验：{trace.get('file_check')}")
+        lines.append(f"- 校验后参数：{trace.get('validated_arguments')}")
+        lines.append(f"- 工具执行状态：{trace.get('execution_status')}")
+        lines.append(f"- 是否使用 fallback：{trace.get('fallback_used')}")
+        lines.append(f"- fallback 步骤：{trace.get('fallback_steps')}")
+
+        return "\n".join(lines)
+
     if not trace:
         return "暂无工具调用轨迹。"
 
