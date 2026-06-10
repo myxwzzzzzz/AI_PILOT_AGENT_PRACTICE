@@ -217,8 +217,6 @@ def main():
 
         # 普通任务：路由 → 工具执行 → 格式化回复 → 写日志
 
-        print(f"[DEBUG] use_llm_mode={use_llm_mode}, llm_selector_mode={llm_selector_mode}, use_rag_mode={use_rag_mode}")
-        
         if use_llm_mode:
             route_result = run_llm_agent_task(
                 user_input=user_input,

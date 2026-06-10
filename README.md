@@ -1,649 +1,489 @@
-# AI Pilot Agent：数据分析与金融策略研究自动化助手
+# AI Pilot Agent Practice
 
-> 一个面向 AI Pilot / AI 应用 / Agent 工具调用岗位的项目原型。  
-> 项目目标是用 Python 构建一个可交互的命令行 Agent Demo，让系统能够根据用户自然语言任务，自动选择工具、校验数据类型、执行数据分析或策略研究任务，并生成 Markdown 报告、工具调用轨迹和日志记录。
+一个面向 **AI Pilot / Agent 工具调用 / 数据分析自动化** 场景的学习型项目。
+
+项目从最基础的 CSV 数据分析助手开始，逐步演进为支持：
+
+* Rule-based Router
+* Tool Registry
+* 文件类型识别
+* 金融指标分析
+* 均线策略回测
+* 参数扫描
+* 图表生成
+* Markdown 报告生成
+* LLM Tool Calling
+* DeepSeek 真实大模型接入
+* RAG 文档检索
+* RAG 知识问答
+* fallback 容错机制
+* 工具调用 trace
+* 工具日志记录
+
+的 AI Pilot Agent 原型系统。
 
 ---
 
-## 1. 项目背景
+## 1. 项目目标
 
-本项目围绕 AI Pilot 实习生岗位常见能力要求设计，重点覆盖：
+本项目目标不是简单调用大模型聊天，而是构建一个具有明确边界和安全执行逻辑的 Agent 系统。
 
-- 大模型与智能 Agent 在业务场景中的落地思路；
-- 数据智能处理与流程自动化；
-- 金融数据分析、风险收益指标计算；
-- 简单量化策略回测与参数扫描；
-- 工具调用、状态管理、文件类型校验、调用轨迹与日志审计。
-
-虽然当前版本暂未接入真实大模型 API，但已经完成了一个 Rule-based Agent Prototype：
+核心思想是：
 
 ```text
-用户自然语言输入
-→ 当前文件状态管理
-→ 文件类型识别
-→ Tool Registry 匹配工具
-→ 参数解析
-→ 文件类型校验
-→ 工具执行
-→ 自然语言回复
-→ Markdown 报告生成
-→ 工具调用轨迹展示
-→ 工具调用日志记录
+LLM 负责理解用户意图、选择工具、生成参数或基于文档生成回答；
+Python 负责状态管理、文件校验、参数校验、工具执行、日志和 trace；
+RAG 负责把本地知识文档注入回答和工具选择过程。
 ```
 
----
-
-## 2. 项目定位
-
-本项目不是传统 Notebook 分析脚本，而是一个小型 Agent 工程原型。
-
-它模拟了真实 Agent 系统中的几个核心模块：
-
-| 项目模块 | Agent 系统概念 |
-|---|---|
-| `main.py` | 用户交互入口 / CLI Assistant |
-| `current_file_path` | 状态管理 State |
-| `file_inspector.py` | 上下文识别 / 数据环境识别 |
-| `tool_registry.py` | 工具注册表 / Tool Registry |
-| `router.py` | 工具选择 / Tool Selection / Guardrails |
-| `parameter_parser.py` | 参数解析 / Parameter Extraction |
-| `tools.py` | 渠道数据分析工具 |
-| `finance_tools.py` | 金融分析与策略研究工具 |
-| `response_formatter.py` | 结果解释 / Response Formatting |
-| `trace_formatter.py` | 工具调用轨迹 / Tool Call Trace |
-| `logger.py` | 日志记录 / Audit Log |
+也就是说，本项目中的 LLM 不直接执行代码，也不直接操作文件，而是作为“决策层”参与 Agent 工作流。
 
 ---
 
-## 3. 核心功能
+## 2. 当前版本状态：v0.3
 
-### 3.1 交互式命令行助手
+当前项目已经从最初的 Rule-based Agent Prototype，升级为支持 **LLM Tool Calling + RAG QA** 的 AI Pilot Agent 原型。
 
-用户可以直接输入自然语言任务，例如：
+v0.3 版本新增能力包括：
+
+* 接入 DeepSeek `deepseek-v4-pro` 作为真实 LLM Selector；
+* 支持 OpenAI-compatible API 调用方式；
+* 支持 LLM 根据用户自然语言选择工具并生成参数；
+* 保留 Python 侧安全执行层，包括工具存在性校验、文件类型校验和参数合法性校验；
+* 支持 LLM 调用失败时自动 fallback 到 mock selector 或旧规则 router；
+* 新增 LLM API 健康检查工具，用于检查 API Key、模型连接和 JSON 返回能力；
+* 新增本地 RAG 文档层，支持读取 `documents/` 下的 Markdown / txt 知识文档；
+* 新增关键词检索版 RAG Retriever；
+* 支持知识性问题走 RAG QA，执行性问题走 Tool Calling；
+* 支持 DeepSeek 基于 RAG 检索片段生成自然语言回答；
+* DeepSeek 不可用时，RAG QA 会 fallback 到本地规则回答。
+
+当前系统已经具备三条主要执行路径：
 
 ```text
-帮我读取这个 CSV 文件
-分析一下渠道转化率
-生成渠道分析报告
-切换文件 data/stock_price_strategy.csv
-运行 MA5-MA10 回测
-按收益率扫描均线参数
-生成策略研究总结报告
-查看工具
-查看日志
-开启轨迹
-```
+规则模式：
+用户输入 → router.py → 工具执行
 
-系统会自动识别任务并调用对应工具。
+LLM Tool Calling 模式：
+用户输入 → DeepSeek / mock selector → llm_router.py → 工具执行
+
+RAG QA 模式：
+知识性问题 → RAG 检索 → DeepSeek 生成回答 → 本地知识片段溯源
+```
 
 ---
 
-### 3.2 文件状态管理
+## 3. 当前支持的数据能力
 
-系统维护当前数据文件状态：
+### 3.1 渠道转化分析
 
-```python
-current_file_path = "data/channel_data.csv"
-```
-
-用户可以通过命令切换文件：
+适用于包含以下字段的 CSV：
 
 ```text
-切换文件 data/stock_price.csv
-切换文件 data/stock_price_strategy.csv
-切换文件 data/channel_data_new.csv
+date, channel, visits, signups, payments
 ```
 
-切换后，后续分析都基于新文件执行。
+支持能力：
+
+* 读取 CSV 文件；
+* 查看字段、缺失值和统计信息；
+* 分析各渠道访问量、注册量、支付量；
+* 计算注册率、支付率、注册到支付转化率；
+* 判断表现最好的渠道；
+* 生成渠道分析 Markdown 报告。
 
 ---
 
-### 3.3 文件类型识别与任务兼容性校验
+### 3.2 股票价格与风险收益分析
 
-系统根据 CSV 字段自动识别文件类型：
+适用于包含以下字段的 CSV：
 
-| 文件字段 | 文件类型 |
-|---|---|
-| `date, channel, visits, signups, payments` | 渠道转化数据 |
-| `date, close` | 股票价格数据 |
-| 其他字段 | 未知类型数据 |
+```text
+date, close
+```
 
-如果用户用错误文件执行任务，系统会拦截。
+支持能力：
+
+* 读取股票价格数据；
+* 计算总收益率；
+* 计算年化波动率；
+* 计算最大回撤；
+* 计算夏普比率；
+* 生成金融指标报告。
+
+---
+
+### 3.3 均线策略回测
+
+支持基于股票价格数据运行 MA 均线策略，例如：
+
+```text
+MA3-MA5
+MA5-MA10
+MA3-MA10
+```
+
+支持能力：
+
+* 运行均线策略回测；
+* 生成回测 Markdown 报告；
+* 生成策略净值曲线；
+* 生成最大回撤曲线；
+* 扫描多个均线参数组合；
+* 按夏普比率、策略收益率、超额收益、最大回撤排序；
+* 生成参数扫描图表；
+* 生成策略研究总结报告。
+
+---
+
+## 4. LLM Tool Calling 设计
+
+项目中的 LLM Tool Calling 并不是让大模型直接执行任务，而是让大模型返回结构化工具调用结果。
 
 示例：
 
-```text
-当前文件：data/channel_data.csv
-用户输入：分析风险收益
-系统提示：当前任务需要股票价格数据，请先切换文件 data/stock_price.csv
+```json
+{
+  "intent_type": "tool_call",
+  "tool_name": "generate_backtest_report",
+  "arguments": {
+    "short_window": 5,
+    "long_window": 10
+  },
+  "reason": "用户要求生成 MA5-MA10 回测报告。"
+}
 ```
 
-这体现了 Agent Guardrails 思路：不是所有工具都能随便调用，必须先校验数据结构是否匹配。
+然后 Python 系统会继续执行：
+
+```text
+检查工具是否存在
+→ 检查当前文件类型是否匹配
+→ 校验参数是否合法
+→ 执行真实 Python 工具函数
+→ 格式化回复
+→ 记录 trace 和日志
+```
+
+这样可以避免 LLM 直接拥有执行权，提高系统可控性。
 
 ---
 
-## 4. 已实现工具列表
+## 5. RAG QA 设计
 
-### 4.1 渠道数据分析工具
-
-| 工具名称 | 功能 |
-|---|---|
-| `read_csv_file()` | 读取 CSV，返回行数、字段和前几行预览 |
-| `summarize_csv()` | 输出数据规模、字段、缺失值和数值统计 |
-| `analyze_channel_conversion()` | 计算注册转化率、付费转化率、注册到付费转化率 |
-| `generate_channel_analysis_report()` | 自动生成渠道分析 Markdown 报告 |
-
-示例输入：
+RAG 模式用于处理知识性问题，例如：
 
 ```text
+MA5-MA10 策略适合震荡行情吗？
+最大回撤是什么意思？
+如果用户问最大回撤，sort_by 应该是什么？
+```
+
+处理流程：
+
+```text
+用户输入
+→ 本地 intent guard 判断是否为知识问答
+→ 检索 documents/ 下的相关文档片段
+→ DeepSeek 基于检索片段生成回答
+→ 如果 DeepSeek 不可用，fallback 到本地规则回答
+→ 输出答案和参考片段
+```
+
+示例回答会附带本地知识来源：
+
+```text
+参考的本地知识片段：
+- ma_strategy_notes.md::chunk_0
+- agent_tool_usage_notes.md::chunk_0
+```
+
+---
+
+## 6. 项目目录结构
+
+当前核心结构如下：
+
+```text
+ai_pilot_agent/
+├─ main.py
+├─ config.py
+├─ tool_registry.py
+├─ router.py
+├─ llm_agent_runner.py
+├─ llm_tool_selector.py
+├─ llm_router.py
+├─ llm_tool_schema.py
+├─ mock_llm_tool_selector.py
+├─ real_llm_tool_selector.py
+├─ llm_health_check.py
+├─ rag_document_loader.py
+├─ rag_retriever.py
+├─ rag_qa.py
+├─ rag_llm_answerer.py
+├─ file_inspector.py
+├─ parameter_parser.py
+├─ response_formatter.py
+├─ trace_formatter.py
+├─ logger.py
+├─ tools.py
+├─ finance_tools.py
+├─ requirements.txt
+├─ README.md
+├─ data/
+│  ├─ channel_data.csv
+│  ├─ channel_data_new.csv
+│  ├─ stock_price.csv
+│  ├─ stock_price_strategy.csv
+│  ├─ logs/
+│  └─ output/
+│     ├─ reports/
+│     └─ charts/
+├─ documents/
+│  ├─ ma_strategy_notes.md
+│  └─ agent_tool_usage_notes.md
+├─ docs/
+│  ├─ architecture.md
+│  ├─ usage_example.md
+│  └─ ai_pilot_agent_learning_roadmap_updated.md
+└─ tests/
+```
+
+---
+
+## 7. v0.3 核心模块说明
+
+| 文件                          | 作用                                                |
+| --------------------------- | ------------------------------------------------- |
+| `main.py`                   | 命令行交互入口，负责模式切换、用户输入、文件状态和结果展示                     |
+| `router.py`                 | 旧规则路由器，作为规则模式和最终 fallback 保留                      |
+| `tool_registry.py`          | 工具注册表，统一管理工具名称、描述、关键词、文件类型要求和 handler             |
+| `llm_tool_schema.py`        | 将工具注册表转换为 LLM 可读 Tool Schema                      |
+| `mock_llm_tool_selector.py` | 本地规则版 LLM selector，用于 API 不可用时 fallback           |
+| `real_llm_tool_selector.py` | DeepSeek 真实 LLM selector，根据用户输入和 Tool Schema 选择工具 |
+| `llm_tool_selector.py`      | mock / real selector 的统一入口                        |
+| `llm_router.py`             | LLM Tool Call 的安全执行层，负责工具校验、文件类型校验和参数校验           |
+| `llm_agent_runner.py`       | LLM Agent 总调度器，负责 Tool Calling、RAG QA 和 fallback  |
+| `llm_health_check.py`       | DeepSeek API 健康检查工具                               |
+| `rag_document_loader.py`    | 读取 `documents/` 下的本地知识文档并切块                       |
+| `rag_retriever.py`          | 关键词检索版 RAG Retriever                              |
+| `rag_qa.py`                 | RAG QA 入口，负责知识问答路径                                |
+| `rag_llm_answerer.py`       | 使用 DeepSeek 基于 RAG 检索片段生成自然语言回答                   |
+| `file_inspector.py`         | 根据 CSV 字段识别当前文件类型                                 |
+| `parameter_parser.py`       | 从自然语言中解析 MA 参数和扫描排序指标                             |
+| `tools.py`                  | 渠道数据分析工具                                          |
+| `finance_tools.py`          | 金融指标、均线回测、参数扫描、图表和报告生成工具                          |
+| `response_formatter.py`     | 将工具结果或 RAG QA 结果格式化为用户可读回复                        |
+| `trace_formatter.py`        | 展示规则路由、LLM Tool Calling、RAG QA 和 fallback 轨迹      |
+| `logger.py`                 | 记录工具调用日志                                          |
+| `config.py`                 | 统一管理数据、输出、日志、图表、报告和文档路径                           |
+
+---
+
+## 8. 安装与运行
+
+### 8.1 安装依赖
+
+```bash
+pip install -r requirements.txt
+```
+
+如果手动安装依赖，至少需要：
+
+```bash
+pip install pandas matplotlib openai
+```
+
+---
+
+### 8.2 设置 DeepSeek API Key
+
+真实 LLM 模式依赖环境变量：
+
+```powershell
+$env:DEEPSEEK_API_KEY="你的 DeepSeek API Key"
+```
+
+注意：PowerShell 中这样设置的环境变量只对当前窗口有效。
+
+如果没有设置 API Key，系统仍然可以运行规则模式、mock LLM 模式和部分 RAG fallback 功能。
+
+---
+
+### 8.3 启动主程序
+
+```bash
+python main.py
+```
+
+---
+
+## 9. 常用命令示例
+
+### 9.1 文件切换
+
+```text
+切换文件 data/channel_data.csv
+切换文件 data/channel_data_new.csv
+切换文件 data/stock_price.csv
+切换文件 data/stock_price_strategy.csv
+```
+
+---
+
+### 9.2 规则数据分析
+
+```text
+读取这个 CSV 文件
+查看统计信息
 分析渠道转化率
 生成渠道分析报告
-```
-
----
-
-### 4.2 金融指标分析工具
-
-| 工具名称 | 功能 |
-|---|---|
-| `read_stock_price_data()` | 读取股票/策略价格数据 |
-| `calculate_stock_metrics()` | 计算区间收益率、年化波动率、最大回撤、夏普比率 |
-| `generate_stock_metrics_report()` | 生成金融指标 Markdown 报告 |
-
-示例输入：
-
-```text
-读取股票价格数据
 分析风险收益
 生成金融指标报告
 ```
 
 ---
 
-### 4.3 策略回测工具
-
-| 工具名称 | 功能 |
-|---|---|
-| `run_moving_average_backtest()` | 运行均线策略回测 |
-| `generate_backtest_report()` | 生成均线策略回测报告 |
-
-支持默认参数：
-
-```text
-运行均线策略回测
-生成回测报告
-```
-
-也支持自定义参数：
+### 9.3 均线策略任务
 
 ```text
 运行 MA5-MA10 回测
 生成 MA5-MA10 回测报告
-用 5 日均线和 10 日均线做回测
-```
-
-系统会解析：
-
-```python
-short_window = 5
-long_window = 10
-```
-
-并传入回测工具。
-
----
-
-### 4.4 参数扫描与策略优化工具
-
-| 工具名称 | 功能 |
-|---|---|
-| `optimize_moving_average_parameters()` | 批量扫描多组均线参数 |
-| `generate_parameter_scan_report()` | 生成参数扫描对比报告 |
-
-示例输入：
-
-```text
+生成 MA5-MA10 回测图表
 扫描均线参数
-优化均线策略参数
-按收益率扫描均线参数
-按超额收益优化均线策略
+按收益率生成参数扫描图表
 按最大回撤生成参数扫描报告
-```
-
-支持排序指标解析：
-
-| 用户表达 | 对应参数 |
-|---|---|
-| 夏普、夏普比率、sharpe | `sort_by="sharpe_ratio"` |
-| 收益率、策略收益 | `sort_by="strategy_total_return"` |
-| 超额收益 | `sort_by="excess_return"` |
-| 最大回撤、回撤 | `sort_by="max_drawdown"` |
-
----
-
-### 4.5 策略研究总结报告工具
-
-| 工具名称 | 功能 |
-|---|---|
-| `generate_strategy_research_summary()` | 综合基础金融指标、默认回测、参数扫描，生成策略研究总结报告 |
-
-示例输入：
-
-```text
 生成策略研究总结报告
-生成按收益率排序的策略研究报告
-生成按最大回撤排序的策略研究报告
-总结一下这个策略研究结果
 ```
-
-报告内容包括：
-
-1. 标的基础风险收益指标；
-2. 默认 MA3-MA5 策略表现；
-3. 参数扫描最佳组合；
-4. 策略与买入持有对比；
-5. 风险提示；
-6. 后续优化建议。
 
 ---
 
-## 5. 项目目录结构
-
-当前推荐目录结构：
+### 9.4 LLM 与 RAG 模式
 
 ```text
-ai_pilot_agent/
-├── main.py
-├── router.py
-├── tool_registry.py
-├── file_inspector.py
-├── parameter_parser.py
-├── response_formatter.py
-├── trace_formatter.py
-├── logger.py
-├── tools.py
-├── finance_tools.py
-├── test_finance_tools.py
-├── test_backtest.py
-├── test_parameter_scan.py
-├── test_strategy_summary.py
-├── data/
-│   ├── channel_data.csv
-│   ├── channel_data_new.csv
-│   ├── stock_price.csv
-│   ├── stock_price_strategy.csv
-│   ├── channel_analysis_report.md
-│   ├── stock_metrics_report.md
-│   ├── backtest_report.md
-│   ├── parameter_scan_report.md
-│   ├── strategy_research_summary.md
-│   └── logs/
-│       └── tool_calls.jsonl
-└── README.md
-```
-
----
-
-## 6. 运行方式
-
-### 6.1 安装依赖
-
-当前项目核心依赖：
-
-```bash
-pip install pandas numpy
-```
-
-如果后续增加图表或可视化，可加入：
-
-```bash
-pip install matplotlib streamlit
-```
-
----
-
-### 6.2 启动命令行助手
-
-```bash
-python main.py
-```
-
-启动后可以输入：
-
-```text
-查看工具
-切换文件 data/stock_price_strategy.csv
+开启LLM模式
+关闭LLM模式
+使用真实LLM
+使用模拟LLM
+开启RAG模式
+关闭RAG模式
+检查LLM连接
 开启轨迹
-运行 MA5-MA10 回测
-生成策略研究总结报告
-查看日志
-退出
+关闭轨迹
 ```
 
 ---
 
-## 7. 示例数据说明
-
-### 7.1 渠道数据
-
-文件：
+### 9.5 RAG 知识问答
 
 ```text
-data/channel_data.csv
-```
-
-字段：
-
-| 字段 | 含义 |
-|---|---|
-| `date` | 日期 |
-| `channel` | 渠道 |
-| `visits` | 访问量 |
-| `signups` | 注册数 |
-| `payments` | 付费数 |
-
-用于分析渠道转化率。
-
----
-
-### 7.2 股票价格数据
-
-文件：
-
-```text
-data/stock_price.csv
-data/stock_price_strategy.csv
-```
-
-字段：
-
-| 字段 | 含义 |
-|---|---|
-| `date` | 日期 |
-| `close` | 收盘价 / 净值 |
-
-用于金融指标计算、策略回测和参数扫描。
-
----
-
-## 8. 示例交互
-
-### 示例 1：渠道分析
-
-```text
-请输入你的问题：分析渠道转化率
-```
-
-系统输出：
-
-```text
-已完成渠道转化率分析。
-
-整体来看，小红书是当前表现最好的渠道，它在注册转化率、付费转化率和注册到付费转化率三个指标上均排名第一。
+MA5-MA10 策略适合震荡行情吗？
+最大回撤是什么意思？
+如果用户问最大回撤，sort_by 应该是什么？
+夏普比率高说明什么？
 ```
 
 ---
 
-### 示例 2：金融指标分析
+## 10. fallback 机制
+
+系统支持多层 fallback：
 
 ```text
-请输入你的问题：切换文件 data/stock_price_strategy.csv
-请输入你的问题：分析风险收益
+DeepSeek Tool Selector 失败
+→ mock selector
+→ 旧规则 router
+
+DeepSeek RAG Answer 失败
+→ 本地规则 RAG 回答
+
+LLM 模式关闭
+→ 直接使用规则 router
 ```
 
-系统输出：
+这使得项目在没有 API Key、网络不可用、公司 WiFi 限制 API 访问等情况下仍然可以演示核心功能。
+
+---
+
+## 11. LLM 健康检查
+
+可以在主程序中输入：
 
 ```text
-已完成风险收益指标分析。
+检查LLM连接
+```
 
-区间收益率：41.00%
-年化波动率：...
-最大回撤：...
-夏普比率：...
+系统会检查：
+
+```text
+DEEPSEEK_API_KEY 是否存在
+DeepSeek API 是否能连接
+模型是否能返回合法 JSON
+请求耗时
+失败阶段和失败原因
+```
+
+常见失败示例：
+
+```text
+调用 DeepSeek API 失败：Connection error.
+```
+
+这通常与网络环境、代理、公司 WiFi、防火墙或 API 域名访问限制有关，不一定是代码问题。
+
+---
+
+## 12. 输出文件
+
+生成结果默认保存在：
+
+```text
+data/output/reports/
+data/output/charts/
+data/logs/
+```
+
+其中：
+
+* Markdown 报告保存在 `data/output/reports/`
+* PNG 图表保存在 `data/output/charts/`
+* 工具调用日志保存在 `data/logs/tool_calls.jsonl`
+
+这些运行时输出通常不建议提交到 GitHub。
+
+---
+
+## 13. 当前版本定位
+
+当前项目适合作为：
+
+```text
+AI Pilot 实习项目原型
+Agent 工具调用学习项目
+LLM Tool Calling 练习项目
+RAG 入门项目
+数据分析自动化 CLI Demo
+```
+
+项目重点不在预测模型准确率，而在展示：
+
+```text
+如何把自然语言输入
+转换成可控、安全、可追踪的数据分析工作流
 ```
 
 ---
 
-### 示例 3：自定义均线回测
+## 14. 下一阶段计划
+
+下一阶段不继续盲目增加新功能，而是进行项目结构收敛：
 
 ```text
-请输入你的问题：运行 MA5-MA10 回测
+第 49 课：项目结构盘点，区分核心文件、fallback 文件和 legacy 文件
+第 50 课：清理 main.py，拆分命令处理和任务执行逻辑
+第 51 课：整理 LLM / RAG / Tool Calling 模块边界
+第 52 课：全量回归测试
+第 53 课：更新架构文档和使用示例
+第 54 课：打 v0.3 tag 并推送 GitHub
+第 55 课：再考虑 embedding / 向量检索 / 多文档知识库
 ```
-
-系统输出：
-
-```text
-已完成均线策略回测。
-
-策略名称：MA5-MA10 均线策略
-策略区间收益率：22.61%
-买入持有收益率：41.00%
-超额收益：-18.39%
-最新信号：持仓
-```
-
----
-
-### 示例 4：参数扫描
-
-```text
-请输入你的问题：按收益率扫描均线参数
-```
-
-系统输出：
-
-```text
-已完成均线策略参数扫描。
-
-本次共完成 9 组参数组合回测，排序指标为：策略收益率。
-最佳参数组合：...
-```
-
----
-
-### 示例 5：策略研究总结报告
-
-```text
-请输入你的问题：生成策略研究总结报告
-```
-
-系统输出：
-
-```text
-策略研究总结报告已生成。
-
-报告路径：
-data/strategy_research_summary.md
-
-综合建议：
-当前样本中均线策略整体未能产生正超额收益，建议不要直接使用当前参数，后续应扩大样本区间、增加震荡和下跌行情数据，并引入风控或过滤条件。
-```
-
----
-
-## 9. 工具调用轨迹
-
-输入：
-
-```text
-开启轨迹
-运行 MA5-MA10 回测
-```
-
-系统会显示：
-
-```text
-工具调用轨迹：
-- 用户输入：运行 MA5-MA10 回测
-- 匹配方式：关键词匹配
-- 命中关键词：回测
-- 选择工具：run_moving_average_backtest
-- 当前文件：data/stock_price_strategy.csv
-- 当前文件类型：股票价格数据
-- 工具要求文件类型：股票价格数据
-- 参数解析：短期均线=5，长期均线=10
-- 实际传入参数：{'short_window': 5, 'long_window': 10}
-- 文件类型校验：通过
-- 工具执行状态：成功
-```
-
-这体现了 Agent 系统的可解释性与可审计性。
-
----
-
-## 10. 工具调用日志
-
-系统会将工具调用写入：
-
-```text
-data/logs/tool_calls.jsonl
-```
-
-日志记录内容包括：
-
-- 时间戳；
-- 用户输入；
-- 当前文件；
-- 选择工具；
-- 工具执行状态；
-- 输出摘要；
-- 工具调用轨迹。
-
-可在助手中输入：
-
-```text
-查看日志
-```
-
-查看最近工具调用记录。
-
----
-
-## 11. 当前能力边界
-
-当前版本仍有一些限制：
-
-1. 路由仍基于关键词规则，而不是真正的大模型理解；
-2. 当前金融数据为本地 CSV 示例数据，未接入实时行情；
-3. 回测未考虑手续费、滑点和冲击成本；
-4. 当前策略仅支持简单均线策略；
-5. 参数扫描存在样本内过拟合风险；
-6. 样本数据较短，夏普比率和年化波动率不适合过度解读；
-7. 当前版本主要是命令行交互，尚未提供 Web UI；
-8. 当前未接入 RAG、研报解析或真实投研文档问答。
-
----
-
-## 12. 后续优化方向
-
-### 12.1 接入 LLM Tool Calling
-
-将当前 Tool Registry 升级为 LLM 可理解的工具 schema，让大模型根据工具描述自动选择工具。
-
-计划新增：
-
-```text
-tool name
-tool description
-tool parameters
-required file type
-execution constraints
-```
-
----
-
-### 12.2 使用 LangGraph 做 Workflow 编排
-
-将当前单步工具调用升级为多步骤工作流：
-
-```text
-读取数据
-→ 判断文件类型
-→ 选择分析路径
-→ 执行指标分析
-→ 执行回测
-→ 执行参数扫描
-→ 生成总结报告
-```
-
----
-
-### 12.3 增加 RAG 文档分析能力
-
-面向证券投研场景，增加：
-
-- 研报 PDF 读取；
-- 财报/公告文本解析；
-- 文本切分；
-- 向量检索；
-- 带引用来源的问答；
-- 投研摘要和风险提示生成。
-
----
-
-### 12.4 增加更多策略工具
-
-可扩展：
-
-- 均线交叉策略；
-- 动量策略；
-- 布林带策略；
-- 回撤止损；
-- 仓位控制；
-- 多标的对比；
-- 基准指数对比。
-
----
-
-### 12.5 增加可视化和前端
-
-可加入：
-
-- Streamlit；
-- FastAPI；
-- 策略净值曲线；
-- 回撤曲线；
-- 参数扫描热力图；
-- 报告下载功能。
-
----
-
-## 13. 面试表达
-
-可以这样介绍项目：
-
-> 我做了一个面向 AI Pilot 场景的 Agent 工具调用原型。系统支持命令行自然语言输入，通过文件类型识别、Tool Registry、参数解析和工具调用轨迹，实现渠道数据分析、金融风险收益分析、均线策略回测、参数扫描和策略研究总结报告生成。  
-> 
-> 项目的重点不是单一模型训练，而是模拟真实业务中 Agent 如何把数据处理、策略分析和报告生成流程自动化。系统会根据用户输入选择工具，并在执行前做文件类型校验，避免用错误数据调用错误工具；同时记录工具调用轨迹和日志，提升可解释性和可审计性。  
-> 
-> 后续我计划接入 LLM Tool Calling 和 LangGraph，把当前规则路由升级成更接近真实生产系统的 Agent Workflow，并加入 RAG 研报分析能力。
-
----
-
-## 14. 项目关键词
-
-```text
-Python
-pandas
-Agent
-Tool Calling
-Tool Registry
-Rule-based Router
-Parameter Parsing
-Financial Data Analysis
-Backtesting
-Moving Average Strategy
-Parameter Scan
-Markdown Report
-Trace
-Audit Log
-AI Pilot
-Workflow Automation
-```
-
----
-
-## 15. 免责声明
-
-本项目仅用于学习和技术演示，不构成任何投资建议。  
-所有数据均为示例数据，策略结果不代表真实市场表现。
