@@ -1,3 +1,16 @@
+"""
+Rule-based router.
+
+This module is intentionally kept in v0.3.
+
+Current roles:
+1. Main router when LLM mode is disabled.
+2. Final fallback when real/mock LLM selectors fail.
+3. Historical baseline for comparing rule-based routing with LLM Tool Calling.
+
+Do not delete this file unless all fallback paths have been redesigned.
+"""
+
 from file_inspector import detect_file_type
 from parameter_parser import extract_ma_windows, extract_scan_sort_by
 

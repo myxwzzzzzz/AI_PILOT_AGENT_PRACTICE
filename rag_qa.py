@@ -1,3 +1,17 @@
+"""
+RAG QA entrypoint.
+
+This module answers knowledge-style questions using retrieved local documents.
+
+Flow:
+1. Receive user question and retrieved chunks.
+2. Prefer LLM-generated RAG answer.
+3. Fall back to local rule-based answer if LLM is unavailable.
+4. Return answer, sources, and answer_source metadata.
+
+This module should not execute data analysis tools.
+"""
+
 from rag_retriever import retrieve_relevant_chunks
 import os
 import time

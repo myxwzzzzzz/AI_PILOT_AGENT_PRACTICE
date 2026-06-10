@@ -1,3 +1,16 @@
+"""
+Mock LLM tool selector.
+
+This module simulates LLM Tool Calling with local rules.
+
+Current roles:
+1. Fallback selector when DeepSeek API is unavailable.
+2. Local demo mode when no API key is configured.
+3. Baseline for testing the LLM Tool Calling pipeline without network access.
+
+Do not delete this file while fallback_to_mock is still used by llm_agent_runner.py.
+"""
+
 from parameter_parser import extract_ma_windows, extract_scan_sort_by
 
 

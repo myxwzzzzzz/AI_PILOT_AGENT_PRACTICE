@@ -37,7 +37,7 @@ def print_startup_message(state: AppState) -> None:
     print("17. 生成参数扫描报告")
     print("18. 生成策略研究总结报告")
     print("19. 开启LLM模式")
-    print("20. 使用真实LLM")
+    print("20. 使用模拟LLM（离线调试使用")
     print("21. 开启RAG模式")
     print("22. 检查LLM连接")
     print("23. MA5-MA10 策略适合震荡行情吗？")
@@ -76,7 +76,7 @@ def main() -> None:
         current_file_path="data/channel_data.csv",
         show_trace=False,
         use_llm_mode=False,
-        llm_selector_mode="mock",
+        llm_selector_mode="real",
         use_rag_mode=False,
     )
 

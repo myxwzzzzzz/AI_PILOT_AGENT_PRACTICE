@@ -145,9 +145,10 @@ def handle_cli_command(user_input: str, state: AppState) -> CommandResult:
 
     if text in ["开启LLM模式", "开启 LLM 模式", "打开LLM模式", "打开 LLM 模式"]:
         state.use_llm_mode = True
+        state.llm_selector_mode = "real"
         return CommandResult(
             handled=True,
-            message="已开启 LLM 模式。后续任务将走 LLM Agent Runner。"
+            message="已开启 LLM 模式。后续任务将默认调用 DeepSeek；如果 DeepSeek 不可用，系统会自动 fallback 到 mock selector 或规则 router。"
         )
 
     if text in ["关闭LLM模式", "关闭 LLM 模式", "退出LLM模式", "退出 LLM 模式"]:
@@ -157,11 +158,12 @@ def handle_cli_command(user_input: str, state: AppState) -> CommandResult:
             message="已关闭 LLM 模式。后续任务将恢复使用规则 router。"
         )
 
-    if text in ["使用Mock LLM", "使用mock LLM", "使用模拟LLM", "使用模拟 LLM"]:
+    if text in ["开启模拟LLM模式", "开启模拟 LLM 模式", "使用模拟LLM", "使用模拟 LLM"]:
+        state.use_llm_mode = True
         state.llm_selector_mode = "mock"
         return CommandResult(
             handled=True,
-            message="已切换为 mock LLM selector。"
+            message="已开启模拟 LLM 模式。该模式不调用 DeepSeek，适合离线演示、调试和回归测试。"
         )
 
     if text in ["使用真实LLM", "使用真实 LLM", "使用Real LLM", "使用real LLM"]:

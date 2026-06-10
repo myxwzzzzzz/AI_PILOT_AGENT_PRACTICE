@@ -11,5 +11,5 @@ class AppState:
     current_file_path: str = "data/channel_data.csv"
     show_trace: bool = False
     use_llm_mode: bool = False
-    llm_selector_mode: str = "mock"
+    llm_selector_mode: str = "real"
     use_rag_mode: bool = False

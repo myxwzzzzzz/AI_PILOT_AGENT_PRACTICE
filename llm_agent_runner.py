@@ -1,3 +1,17 @@
+"""
+LLM Agent runner.
+
+This module is the central coordinator for v0.3 Agent execution.
+
+Responsibilities:
+1. Run LLM Tool Calling tasks.
+2. Route knowledge questions to RAG QA.
+3. Manage fallback from real selector to mock selector to rule router.
+4. Attach trace metadata for debugging.
+
+This module should not contain low-level data analysis logic.
+"""
+
 from llm_tool_selector import select_tool
 from llm_router import route_llm_tool_call
 from router import route_task
