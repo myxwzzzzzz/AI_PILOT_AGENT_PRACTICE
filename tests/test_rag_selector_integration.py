@@ -1,43 +1,25 @@
-import sys
-from pathlib import Path
+import pytest
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.append(str(PROJECT_ROOT))
+pytest.importorskip("openai")
 
 from llm_tool_selector import select_tool
 
 
-file_path = "data/stock_price_strategy.csv"
-
-test_inputs = [
-    "MA5-MA10 策略适合震荡行情吗？",
-    "如果用户问最大回撤，sort_by 应该是什么？",
-    "生成 MA5-MA10 回测报告",
-]
+FILE_PATH = "data/stock_price_strategy.csv"
 
 
-for user_input in test_inputs:
-    print("=" * 80)
-    print("用户输入：", user_input)
+def test_selector_can_attach_rag_chunks_without_api_key(monkeypatch):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
 
     result = select_tool(
-        user_input=user_input,
-        file_path=file_path,
+        user_input="如果用户问最大回撤，sort_by 应该是什么？",
+        file_path=FILE_PATH,
         mode="real",
         use_rag=True,
         rag_top_k=3,
     )
 
-    print("Selector 输出：")
-    print({
-        "tool_name": result.get("tool_name"),
-        "arguments": result.get("arguments"),
-        "reason": result.get("reason"),
-        "selector_mode": result.get("selector_mode"),
-        "use_rag": result.get("use_rag"),
-        "retrieved_chunk_count": len(result.get("retrieved_chunks", [])),
-        "retrieved_chunk_ids": [
-            chunk.get("chunk_id")
-            for chunk in result.get("retrieved_chunks", [])
-        ],
-    })
+    assert result["selector_mode"] == "real"
+    assert result["use_rag"] is True
+    assert len(result["retrieved_chunks"]) > 0
+    assert result["tool_name"] is None

@@ -1,14 +1,16 @@
-import sys
-from pathlib import Path
+import pytest
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.append(str(PROJECT_ROOT))
+pytest.importorskip("openai")
 
-from llm_health_check import (
-    check_deepseek_connection,
-    format_llm_health_check_result,
-)
+from llm_health_check import check_deepseek_connection, format_llm_health_check_result
 
 
-result = check_deepseek_connection()
-print(format_llm_health_check_result(result))
+def test_check_deepseek_connection_without_api_key(monkeypatch):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+
+    result = check_deepseek_connection()
+    formatted = format_llm_health_check_result(result)
+
+    assert result["success"] is False
+    assert result["stage"] == "api_key_check"
+    assert "DEEPSEEK_API_KEY" in formatted

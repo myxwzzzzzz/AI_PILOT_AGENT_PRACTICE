@@ -1,18 +1,19 @@
-import sys
 from pathlib import Path
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.append(str(PROJECT_ROOT))
 
 from finance_tools import generate_backtest_charts
 
 
-file_path = "data/stock_price_strategy.csv"
+FILE_PATH = "data/stock_price_strategy.csv"
 
-print("生成回测图表：")
-result = generate_backtest_charts(
-    file_path=file_path,
-    short_window=5,
-    long_window=10
-)
-print(result)
+
+def test_generate_backtest_charts(tmp_path):
+    result = generate_backtest_charts(
+        file_path=FILE_PATH,
+        output_dir=str(tmp_path),
+        short_window=5,
+        long_window=10,
+    )
+
+    assert result["success"] is True
+    assert Path(result["nav_chart_path"]).exists()
+    assert Path(result["drawdown_chart_path"]).exists()

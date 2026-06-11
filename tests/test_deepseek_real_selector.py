@@ -1,29 +1,29 @@
-import sys
-from pathlib import Path
+import os
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.append(str(PROJECT_ROOT))
+import pytest
+
+pytest.importorskip("openai")
 
 from llm_tool_selector import select_tool
 
 
-file_path = "data/stock_price_strategy.csv"
+pytestmark = pytest.mark.integration
 
-test_inputs = [
-    "生成 MA5-MA10 回测报告",
-    "按收益率生成参数扫描图表",
-    "随便聊聊天"
-]
+FILE_PATH = "data/stock_price_strategy.csv"
 
-for user_input in test_inputs:
-    print("=" * 80)
-    print("用户输入：", user_input)
 
+@pytest.mark.skipif(
+    os.getenv("RUN_REAL_LLM_TESTS") != "1" or not os.getenv("DEEPSEEK_API_KEY"),
+    reason="Set RUN_REAL_LLM_TESTS=1 and DEEPSEEK_API_KEY to run real DeepSeek integration tests.",
+)
+def test_deepseek_real_selector_integration():
     result = select_tool(
-        user_input=user_input,
-        file_path=file_path,
-        mode="real"
+        user_input="生成 MA5-MA10 回测报告",
+        file_path=FILE_PATH,
+        mode="real",
     )
 
-    print("真实 LLM 选择结果：")
-    print(result)
+    assert isinstance(result, dict)
+    assert "tool_name" in result
+    assert "arguments" in result
+    assert result["selector_mode"] == "real"

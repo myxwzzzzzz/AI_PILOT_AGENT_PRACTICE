@@ -1,27 +1,31 @@
-import sys
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.append(str(PROJECT_ROOT))
-
-from finance_tools import (
-    optimize_moving_average_parameters,
-    generate_parameter_scan_report
-)
+from finance_tools import generate_parameter_scan_report, optimize_moving_average_parameters
 
 
-file_path = "data/stock_price_strategy.csv"
+FILE_PATH = "data/stock_price_strategy.csv"
 
-print("运行均线参数扫描：")
-scan_result = optimize_moving_average_parameters(
-    file_path=file_path,
-    sort_by="sharpe_ratio"
-)
-print(scan_result)
 
-print("\n生成均线参数扫描报告：")
-report_result = generate_parameter_scan_report(
-    file_path=file_path,
-    sort_by="sharpe_ratio"
-)
-print(report_result)
+def test_optimize_moving_average_parameters():
+    result = optimize_moving_average_parameters(
+        file_path=FILE_PATH,
+        sort_by="sharpe_ratio",
+    )
+
+    assert result["success"] is True
+    assert result["sort_by"] == "sharpe_ratio"
+    assert result["total_combinations"] > 0
+    assert "best_result" in result
+
+
+def test_generate_parameter_scan_report(tmp_path):
+    output_path = tmp_path / "parameter_scan_report.md"
+
+    result = generate_parameter_scan_report(
+        file_path=FILE_PATH,
+        output_path=str(output_path),
+        sort_by="sharpe_ratio",
+    )
+
+    assert result["success"] is True
+    assert Path(result["output_path"]).exists()

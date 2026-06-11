@@ -1,29 +1,41 @@
-import sys
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.append(str(PROJECT_ROOT))
-
 from finance_tools import (
-    read_stock_price_data,
     calculate_stock_metrics,
-    generate_stock_metrics_report
+    generate_stock_metrics_report,
+    read_stock_price_data,
 )
 
 
-file_path = "data/stock_price.csv"
+FILE_PATH = "data/stock_price.csv"
 
-print("读取股票价格数据：")
-read_result = read_stock_price_data(file_path)
-print(read_result)
 
-print("\n计算金融指标：")
-metrics_result = calculate_stock_metrics(file_path)
-print(metrics_result)
+def test_read_stock_price_data():
+    result = read_stock_price_data(FILE_PATH)
 
-print("\n生成金融指标报告：")
-report_result = generate_stock_metrics_report(
-    file_path,
-    "data/stock_metrics_report.md"
-)
-print(report_result)
+    assert result["success"] is True
+    assert result["rows"] > 0
+    assert "date" in result["columns"]
+    assert "close" in result["columns"]
+
+
+def test_calculate_stock_metrics():
+    result = calculate_stock_metrics(FILE_PATH)
+
+    assert result["success"] is True
+    assert "total_return" in result
+    assert "annualized_volatility" in result
+    assert "max_drawdown" in result
+    assert "sharpe_ratio" in result
+
+
+def test_generate_stock_metrics_report(tmp_path):
+    output_path = tmp_path / "stock_metrics_report.md"
+
+    result = generate_stock_metrics_report(
+        file_path=FILE_PATH,
+        output_path=str(output_path),
+    )
+
+    assert result["success"] is True
+    assert Path(result["output_path"]).exists()

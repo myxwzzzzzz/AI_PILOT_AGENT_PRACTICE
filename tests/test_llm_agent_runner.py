@@ -1,38 +1,37 @@
+import pytest
 
-import sys
-from pathlib import Path
+pytest.importorskip("openai")
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.append(str(PROJECT_ROOT))
-
-from llm_agent_runner import run_llm_agent_task
+from llm_agent_runner import looks_like_knowledge_question, run_llm_agent_task
 
 
-file_path = "data/stock_price_strategy.csv"
+FILE_PATH = "data/stock_price_strategy.csv"
 
 
-print("测试 1：mock selector 正常执行")
-result = run_llm_agent_task(
-    user_input="生成 MA5-MA10 回测报告",
-    file_path=file_path,
-    selector_mode="mock"
-)
-print(result)
+def test_looks_like_knowledge_question():
+    assert looks_like_knowledge_question("最大回撤是什么意思？") is True
+    assert looks_like_knowledge_question("生成 MA5-MA10 回测报告") is False
 
 
-print("\n测试 2：非法 selector mode，自动 fallback 到 mock")
-result = run_llm_agent_task(
-    user_input="生成 MA5-MA10 回测报告",
-    file_path=file_path,
-    selector_mode="bad_mode"
-)
-print(result)
+def test_run_llm_agent_task_with_mock_selector():
+    result = run_llm_agent_task(
+        user_input="生成 MA5-MA10 回测报告",
+        file_path=FILE_PATH,
+        selector_mode="mock",
+    )
+
+    assert result["success"] is True
+    assert result["selected_tool"] == "generate_backtest_report"
+    assert result["trace"]["selector_mode"] == "mock"
 
 
-print("\n测试 3：无工具意图，fallback 到规则 router")
-result = run_llm_agent_task(
-    user_input="随便聊聊天",
-    file_path=file_path,
-    selector_mode="bad_mode"
-)
-print(result)
+def test_run_llm_agent_task_falls_back_to_mock_for_bad_selector_mode():
+    result = run_llm_agent_task(
+        user_input="生成 MA5-MA10 回测报告",
+        file_path=FILE_PATH,
+        selector_mode="bad_mode",
+    )
+
+    assert result["success"] is True
+    assert result["trace"]["fallback_used"] is True
+    assert any("fallback_selector=mock" in step for step in result["trace"]["fallback_steps"])

@@ -1,10 +1,4 @@
-import sys
-from pathlib import Path
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+import pytest
 
 from rag_retrieval_router import retrieve_chunks
 
@@ -21,7 +15,6 @@ def test_retrieve_chunks_keyword_mode():
     assert len(chunks) > 0
 
     first_chunk = chunks[0]
-
     assert "source" in first_chunk
     assert "chunk_id" in first_chunk
     assert "text" in first_chunk
@@ -29,12 +22,8 @@ def test_retrieve_chunks_keyword_mode():
 
 
 def test_retrieve_chunks_unsupported_mode():
-    try:
+    with pytest.raises(ValueError, match="Unsupported retrieval mode"):
         retrieve_chunks(
             query="测试问题",
             mode="vector",
         )
-    except ValueError as error:
-        assert "Unsupported retrieval mode" in str(error)
-    else:
-        raise AssertionError("Expected ValueError for unsupported retrieval mode")
