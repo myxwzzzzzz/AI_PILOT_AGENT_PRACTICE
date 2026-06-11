@@ -11,7 +11,7 @@ Responsibilities:
 
 This module should not contain low-level data analysis logic.
 """
-
+from rag_retrieval_router import retrieve_chunks
 from llm_tool_selector import select_tool
 from llm_router import route_llm_tool_call
 from router import route_task
@@ -152,10 +152,11 @@ def run_llm_agent_task(
 
         fallback_steps.append("local_intent_guard=knowledge_qa")
 
-        retrieved_chunks = retrieve_relevant_chunks(
+        retrieved_chunks = retrieve_chunks(
             query=user_input,
             top_k=rag_top_k,
             min_score=1,
+            mode="keyword",
         )
 
         rag_answer = answer_with_retrieved_context(
@@ -202,10 +203,11 @@ def run_llm_agent_task(
         if not retrieved_chunks:
             from rag_retriever import retrieve_relevant_chunks
 
-            retrieved_chunks = retrieve_relevant_chunks(
+            retrieved_chunks = retrieve_chunks(
                 query=user_input,
                 top_k=rag_top_k,
                 min_score=1,
+                mode="keyword",
             )
 
         rag_answer = answer_with_retrieved_context(

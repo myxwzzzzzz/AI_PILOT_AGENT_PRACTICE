@@ -1,7 +1,8 @@
 from file_inspector import detect_file_type
 from mock_llm_tool_selector import mock_select_tool
 from real_llm_tool_selector import real_select_tool
-from rag_retriever import retrieve_relevant_chunks, format_retrieved_context
+from rag_retriever import format_retrieved_context
+from rag_retrieval_router import retrieve_chunks
 
 SUPPORTED_SELECTOR_MODES = ["mock", "real"]
 
@@ -45,10 +46,11 @@ def select_tool(
     retrieved_context = None
 
     if use_rag:
-        retrieved_chunks = retrieve_relevant_chunks(
+        retrieved_chunks = retrieve_chunks(
            query=user_input,
            top_k=rag_top_k,
            min_score=1,
+           mode="keyword",
     )
         retrieved_context = format_retrieved_context(retrieved_chunks)
 
