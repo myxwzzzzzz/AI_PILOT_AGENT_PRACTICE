@@ -34,3 +34,7 @@ data/archive_reports/
 # Keep output folders
 !data/output/reports/.gitkeep
 !data/output/charts/.gitkeep
+# Generated RAG embedding index
+data/rag_index/*.json
+!data/rag_index/.gitkeep
+
