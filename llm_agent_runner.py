@@ -148,15 +148,12 @@ def run_llm_agent_task(
     # 0. 本地知识问答 guard：明显的知识性问题优先走 RAG QA
     # 这样可以避免 LLM 把“适合吗 / 为什么 / 是什么”误判成工具执行任务。
     if use_rag and looks_like_knowledge_question(user_input):
-        from rag_retriever import retrieve_relevant_chunks
-
         fallback_steps.append("local_intent_guard=knowledge_qa")
 
         retrieved_chunks = retrieve_chunks(
             query=user_input,
             top_k=rag_top_k,
             min_score=1,
-            mode="keyword",
         )
 
         rag_answer = answer_with_retrieved_context(
@@ -201,13 +198,10 @@ def run_llm_agent_task(
         retrieved_chunks = primary_tool_call.get("retrieved_chunks", [])
 
         if not retrieved_chunks:
-            from rag_retriever import retrieve_relevant_chunks
-
             retrieved_chunks = retrieve_chunks(
                 query=user_input,
                 top_k=rag_top_k,
                 min_score=1,
-                mode="keyword",
             )
 
         rag_answer = answer_with_retrieved_context(

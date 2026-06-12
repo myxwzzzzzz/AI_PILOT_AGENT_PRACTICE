@@ -17,17 +17,15 @@ specific retrieval implementation details.
 
 from typing import Any
 
+import config
 from rag_retriever import retrieve_relevant_chunks
-
-
-DEFAULT_RETRIEVAL_MODE = "keyword"
 
 
 def retrieve_chunks(
     query: str,
     top_k: int = 3,
     min_score: int = 1,
-    mode: str = DEFAULT_RETRIEVAL_MODE,
+    mode: str | None = None,
 ) -> list[dict[str, Any]]:
     """
     Unified RAG retrieval entrypoint.
@@ -41,14 +39,17 @@ def retrieve_chunks(
     min_score:
         Minimum score threshold for keyword retrieval.
     mode:
-        Retrieval strategy. Currently only "keyword" is supported.
+        Retrieval strategy. If omitted, config.DEFAULT_RETRIEVAL_MODE is used.
+        Currently only "keyword" is supported.
 
     Returns
     -------
     list[dict]
         Retrieved document chunks.
     """
-    if mode == "keyword":
+    retrieval_mode = mode or config.DEFAULT_RETRIEVAL_MODE
+
+    if retrieval_mode == "keyword":
         return retrieve_relevant_chunks(
             query=query,
             top_k=top_k,
@@ -56,6 +57,6 @@ def retrieve_chunks(
         )
 
     raise ValueError(
-        f"Unsupported retrieval mode: {mode}. "
+        f"Unsupported retrieval mode: {retrieval_mode}. "
         "Currently supported modes: keyword"
     )

@@ -1,6 +1,19 @@
 import pytest
 
+import config
 from rag_retrieval_router import retrieve_chunks
+
+
+def test_retrieve_chunks_uses_config_default_mode():
+    chunks = retrieve_chunks(
+        query="MA5-MA10 策略适合震荡行情吗？",
+        top_k=3,
+        min_score=1,
+    )
+
+    assert config.DEFAULT_RETRIEVAL_MODE == "keyword"
+    assert isinstance(chunks, list)
+    assert len(chunks) > 0
 
 
 def test_retrieve_chunks_keyword_mode():

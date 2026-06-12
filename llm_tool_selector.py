@@ -47,11 +47,10 @@ def select_tool(
 
     if use_rag:
         retrieved_chunks = retrieve_chunks(
-           query=user_input,
-           top_k=rag_top_k,
-           min_score=1,
-           mode="keyword",
-    )
+            query=user_input,
+            top_k=rag_top_k,
+            min_score=1,
+        )
         retrieved_context = format_retrieved_context(retrieved_chunks)
 
     if mode == "mock":

@@ -8,6 +8,11 @@ REPORT_DIR = OUTPUT_DIR / "reports"
 CHART_DIR = OUTPUT_DIR / "charts"
 LOG_DIR = DATA_DIR / "logs"
 
+# Default retrieval strategy used by the RAG retrieval router.
+# Keep this in config.py so upper-level modules do not hardcode
+# implementation details such as keyword / embedding / hybrid.
+DEFAULT_RETRIEVAL_MODE = "keyword"
+
 
 def ensure_output_dirs() -> None:
     """
