@@ -3,13 +3,13 @@ RAG retrieval router.
 
 This module provides a unified retrieval entrypoint.
 
-Current supported retrieval mode:
+Current supported retrieval modes:
 1. keyword: local keyword-based retrieval from rag_retriever.py
+2. embedding: local embedding-index retrieval from rag_embedding_retriever.py
 
 Future retrieval modes:
-1. embedding
-2. vector_db
-3. hybrid
+1. vector_db
+2. hybrid
 
 The goal is to keep rag_qa.py and llm_agent_runner.py independent from
 specific retrieval implementation details.
@@ -18,6 +18,7 @@ specific retrieval implementation details.
 from typing import Any
 
 import config
+from rag_embedding_retriever import retrieve_embedding_chunks
 from rag_retriever import retrieve_relevant_chunks
 
 
@@ -40,7 +41,7 @@ def retrieve_chunks(
         Minimum score threshold for keyword retrieval.
     mode:
         Retrieval strategy. If omitted, config.DEFAULT_RETRIEVAL_MODE is used.
-        Currently only "keyword" is supported.
+        Supported values: "keyword", "embedding".
 
     Returns
     -------
@@ -56,7 +57,14 @@ def retrieve_chunks(
             min_score=min_score,
         )
 
+    if retrieval_mode == "embedding":
+        return retrieve_embedding_chunks(
+            query=query,
+            top_k=top_k,
+            min_score=float(min_score),
+        )
+
     raise ValueError(
         f"Unsupported retrieval mode: {retrieval_mode}. "
-        "Currently supported modes: keyword"
+        "Currently supported modes: keyword, embedding"
     )

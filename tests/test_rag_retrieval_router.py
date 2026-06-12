@@ -34,6 +34,38 @@ def test_retrieve_chunks_keyword_mode():
     assert "score" in first_chunk
 
 
+def test_retrieve_chunks_embedding_mode(monkeypatch, tmp_path):
+    from rag_embedding_indexer import build_embedding_index
+
+    document_dir = tmp_path / "documents"
+    index_path = tmp_path / "rag_index.json"
+    document_dir.mkdir(parents=True, exist_ok=True)
+    (document_dir / "ma_notes.md").write_text(
+        "MA5-MA10 均线策略用于观察短期均线和长期均线的交叉。",
+        encoding="utf-8",
+    )
+
+    build_embedding_index(
+        document_dir=document_dir,
+        index_path=index_path,
+        chunk_size=80,
+        overlap=0,
+        embedding_dim=32,
+    )
+    monkeypatch.setattr(config, "RAG_INDEX_FILE", index_path)
+
+    chunks = retrieve_chunks(
+        query="MA5-MA10 均线策略",
+        top_k=1,
+        min_score=0,
+        mode="embedding",
+    )
+
+    assert len(chunks) == 1
+    assert chunks[0]["retrieval_mode"] == "embedding"
+    assert chunks[0]["embedding_provider"] == "hash"
+
+
 def test_retrieve_chunks_unsupported_mode():
     with pytest.raises(ValueError, match="Unsupported retrieval mode"):
         retrieve_chunks(
