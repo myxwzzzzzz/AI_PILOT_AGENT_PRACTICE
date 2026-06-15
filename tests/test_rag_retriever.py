@@ -19,6 +19,7 @@ def test_retrieve_relevant_chunks():
     assert len(chunks) > 0
     assert "score" in chunks[0]
     assert "text" in chunks[0]
+    assert chunks[0]["retrieval_mode"] == "keyword"
 
 
 def test_format_retrieved_context():

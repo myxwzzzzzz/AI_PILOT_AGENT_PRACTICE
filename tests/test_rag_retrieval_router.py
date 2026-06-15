@@ -32,6 +32,7 @@ def test_retrieve_chunks_keyword_mode():
     assert "chunk_id" in first_chunk
     assert "text" in first_chunk
     assert "score" in first_chunk
+    assert first_chunk["retrieval_mode"] == "keyword"
 
 
 def test_retrieve_chunks_embedding_mode(monkeypatch, tmp_path):

@@ -109,6 +109,7 @@ def retrieve_relevant_chunks(
             scored_chunk = {
                 **chunk,
                 "score": score,
+                "retrieval_mode": "keyword",
             }
             scored_chunks.append(scored_chunk)
 

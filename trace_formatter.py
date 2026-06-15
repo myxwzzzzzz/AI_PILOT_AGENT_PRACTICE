@@ -4,6 +4,9 @@ def format_trace(route_result: dict) -> str:
     """
     trace = route_result.get("trace")
 
+    if not trace:
+        return "暂无工具调用轨迹。"
+
     if trace.get("router_type") == "rag_qa":
         lines = []
         lines.append("\n工具调用轨迹：")
@@ -25,13 +28,7 @@ def format_trace(route_result: dict) -> str:
             if not llm_answer_result.get("success"):
                 lines.append(f"- RAG LLM 失败原因：{llm_answer_result.get('message')}")
 
-        retrieved_chunks = trace.get("retrieved_chunks", [])
-        if retrieved_chunks:
-            lines.append("- RAG 检索片段：")
-            for chunk in retrieved_chunks:
-                lines.append(
-                    f"  - {chunk.get('chunk_id')} | score={chunk.get('score')} | source={chunk.get('source')}"
-                )
+        lines.extend(format_rag_retrieval_trace_lines(trace.get("retrieved_chunks", [])))
 
         lines.append(f"- 是否使用 fallback：{trace.get('fallback_used')}")
         lines.append(f"- fallback 步骤：{trace.get('fallback_steps')}")
@@ -58,14 +55,8 @@ def format_trace(route_result: dict) -> str:
         raw_response = llm_tool_call.get("raw_response")
         if raw_response:
             lines.append(f"- LLM 原始 JSON：{raw_response}")
-        
-        retrieved_chunks = trace.get("retrieved_chunks", [])
-        if retrieved_chunks:
-            lines.append("- RAG 检索片段：")
-            for chunk in retrieved_chunks:
-                lines.append(
-                   f"  - {chunk.get('chunk_id')} | score={chunk.get('score')} | source={chunk.get('source')}"
-                )
+
+        lines.extend(format_rag_retrieval_trace_lines(trace.get("retrieved_chunks", [])))
 
         current_file_info = llm_tool_call.get("current_file_info", {})
         if current_file_info:
@@ -82,9 +73,6 @@ def format_trace(route_result: dict) -> str:
         lines.append(f"- fallback 步骤：{trace.get('fallback_steps')}")
 
         return "\n".join(lines)
-
-    if not trace:
-        return "暂无工具调用轨迹。"
 
     lines = []
     lines.append("工具调用轨迹：")
@@ -125,17 +113,17 @@ def format_trace(route_result: dict) -> str:
     if required_file_type_name:
         lines.append(f"- 工具要求文件类型：{required_file_type_name}")
 
-    parameter_parse = trace.get("parameter_parse") 
+    parameter_parse = trace.get("parameter_parse")
     if isinstance(parameter_parse, dict):
-      lines.append(
-        f"- 参数解析：短期均线={parameter_parse.get('short_window')}，"
-        f"长期均线={parameter_parse.get('long_window')}，"
-        f"来源={parameter_parse.get('source')}"
-    )
+        lines.append(
+            f"- 参数解析：短期均线={parameter_parse.get('short_window')}，"
+            f"长期均线={parameter_parse.get('long_window')}，"
+            f"来源={parameter_parse.get('source')}"
+        )
 
-      if parameter_parse.get("message"):
-          lines.append(f"- 参数说明：{parameter_parse.get('message')}")
-    
+        if parameter_parse.get("message"):
+            lines.append(f"- 参数说明：{parameter_parse.get('message')}")
+
     scan_sort_parse = trace.get("scan_sort_parse")
     if isinstance(scan_sort_parse, dict):
         lines.append(
@@ -164,6 +152,61 @@ def format_trace(route_result: dict) -> str:
         lines.append(f"- 工具错误信息：{tool_error}")
 
     return "\n".join(lines)
+
+
+def format_rag_retrieval_trace_lines(retrieved_chunks: list[dict]) -> list[str]:
+    """
+    格式化 RAG 检索 trace 信息。
+
+    这一层专门展示 retrieval mode、chunk 分数、来源、hybrid 子来源、
+    embedding fallback 状态等信息，便于调试 keyword / embedding / hybrid RAG。
+    """
+    if not retrieved_chunks:
+        return ["- RAG 检索片段数：0"]
+
+    modes = sorted({
+        str(chunk.get("retrieval_mode", "unknown"))
+        for chunk in retrieved_chunks
+    })
+
+    lines = []
+    lines.append(f"- RAG 检索模式：{', '.join(modes)}")
+    lines.append(f"- RAG 检索片段数：{len(retrieved_chunks)}")
+    lines.append("- RAG 检索片段：")
+
+    for chunk in retrieved_chunks:
+        lines.append(format_single_retrieved_chunk_trace_line(chunk))
+
+    return lines
+
+
+def format_single_retrieved_chunk_trace_line(chunk: dict) -> str:
+    """
+    格式化单个 retrieved chunk 的 trace 行。
+    """
+    parts = [
+        f"chunk_id={chunk.get('chunk_id')}",
+        f"mode={chunk.get('retrieval_mode', 'unknown')}",
+        f"score={chunk.get('score')}",
+        f"source={chunk.get('source')}",
+    ]
+
+    if chunk.get("retrieval_sources"):
+        parts.append(f"sources={chunk.get('retrieval_sources')}")
+
+    if chunk.get("keyword_score") is not None:
+        parts.append(f"keyword_score={chunk.get('keyword_score')}")
+
+    if chunk.get("embedding_score") is not None:
+        parts.append(f"embedding_score={chunk.get('embedding_score')}")
+
+    if chunk.get("embedding_provider"):
+        parts.append(f"embedding_provider={chunk.get('embedding_provider')}")
+
+    if chunk.get("embedding_status"):
+        parts.append(f"embedding_status={chunk.get('embedding_status')}")
+
+    return "  - " + " | ".join(parts)
 
 
 def translate_match_type(match_type: str) -> str:
