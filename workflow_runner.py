@@ -13,6 +13,7 @@ Current scope:
 
 from __future__ import annotations
 
+from time import perf_counter
 from typing import Any
 
 from llm_router import route_llm_tool_call
@@ -23,6 +24,15 @@ TERMINAL_SUCCESS_STATUS = "success"
 TERMINAL_FAILED_STATUS = "failed"
 PLANNING_FAILED_STATUS = "planning_failed"
 NOT_WORKFLOW_STATUS = "not_workflow"
+
+
+OUTPUT_PATH_KEYS = [
+    "output_path",
+    "report_path",
+    "chart_path",
+    "nav_chart_path",
+    "drawdown_chart_path",
+]
 
 
 def _build_initial_trace(plan: dict[str, Any], file_path: str) -> dict[str, Any]:
@@ -37,7 +47,37 @@ def _build_initial_trace(plan: dict[str, Any], file_path: str) -> dict[str, Any]
         "planned_step_count": len(plan.get("steps", [])),
         "execution_status": "not_started",
         "stop_on_failure": True,
+        "step_traces": [],
+        "generated_files": [],
     }
+
+
+def _extract_output_paths(tool_result: dict[str, Any] | None) -> list[str]:
+    """
+    Extract generated file paths from a tool result.
+
+    Existing tools do not all use exactly the same field name. Reports usually
+    use output_path, charts may use chart_path, and backtest charts may return
+    nav_chart_path / drawdown_chart_path. The workflow layer normalizes those
+    fields so users can see all generated files in one place.
+    """
+    if not isinstance(tool_result, dict):
+        return []
+
+    paths: list[str] = []
+
+    for key in OUTPUT_PATH_KEYS:
+        value = tool_result.get(key)
+        if isinstance(value, str) and value:
+            paths.append(value)
+
+    for key, value in tool_result.items():
+        if not key.endswith("_path"):
+            continue
+        if isinstance(value, str) and value and value not in paths:
+            paths.append(value)
+
+    return paths
 
 
 def _summarize_tool_result(tool_result: dict[str, Any] | None) -> dict[str, Any]:
@@ -59,7 +99,34 @@ def _summarize_tool_result(tool_result: dict[str, Any] | None) -> dict[str, Any]
         if key in tool_result:
             summary[key] = tool_result[key]
 
+    output_paths = _extract_output_paths(tool_result)
+    if output_paths:
+        summary["output_paths"] = output_paths
+        summary["primary_output_path"] = output_paths[0]
+
+    for key in ["sort_by", "short_window", "long_window", "total_combinations"]:
+        if key in tool_result:
+            summary[key] = tool_result[key]
+
     return summary
+
+
+def _build_step_trace(step_result: dict[str, Any], elapsed_seconds: float) -> dict[str, Any]:
+    """
+    Build a compact trace record for one workflow step.
+    """
+    return {
+        "step_index": step_result.get("step_index"),
+        "step_id": step_result.get("step_id"),
+        "tool_name": step_result.get("tool_name"),
+        "arguments": step_result.get("arguments", {}),
+        "execution_status": step_result.get("execution_status"),
+        "success": step_result.get("success"),
+        "elapsed_seconds": round(elapsed_seconds, 4),
+        "output_key": step_result.get("output_key"),
+        "output_paths": step_result.get("output_paths", []),
+        "error": step_result.get("error"),
+    }
 
 
 def _build_step_result(
@@ -67,12 +134,14 @@ def _build_step_result(
     step_index: int,
     step: dict[str, Any],
     execution_result: dict[str, Any],
+    elapsed_seconds: float = 0.0,
 ) -> dict[str, Any]:
     """
     Normalize one step execution result.
     """
     tool_result = execution_result.get("tool_result")
     success = bool(execution_result.get("success"))
+    output_paths = _extract_output_paths(tool_result)
 
     step_result = {
         "step_index": step_index,
@@ -84,11 +153,45 @@ def _build_step_result(
         "success": success,
         "execution_status": "success" if success else "failed",
         "tool_result": tool_result,
+        "output_paths": output_paths,
+        "elapsed_seconds": round(elapsed_seconds, 4),
         "error": execution_result.get("error") or (tool_result or {}).get("error"),
         "trace": execution_result.get("trace", {}),
     }
 
     return step_result
+
+
+def _build_workflow_summary(
+    *,
+    plan: dict[str, Any],
+    step_results: list[dict[str, Any]],
+    generated_files: list[str],
+    workflow_status: str,
+    elapsed_seconds: float,
+) -> dict[str, Any]:
+    """
+    Build high-level workflow summary metadata.
+    """
+    successful_steps = [step for step in step_results if step.get("success")]
+    failed_steps = [step for step in step_results if not step.get("success")]
+
+    planning_metadata = plan.get("planning_metadata", {}) or {}
+
+    return {
+        "workflow_name": plan.get("workflow_name"),
+        "workflow_display_name": plan.get("workflow_display_name"),
+        "workflow_status": workflow_status,
+        "planned_step_count": len(plan.get("steps", [])),
+        "executed_step_count": len(step_results),
+        "successful_step_count": len(successful_steps),
+        "failed_step_count": len(failed_steps),
+        "generated_file_count": len(generated_files),
+        "generated_files": generated_files,
+        "sort_by": planning_metadata.get("sort_by"),
+        "sort_by_name": planning_metadata.get("sort_by_name"),
+        "elapsed_seconds": round(elapsed_seconds, 4),
+    }
 
 
 def run_workflow_plan(
@@ -110,11 +213,13 @@ def run_workflow_plan(
         If True, stop at the first failed step. The first prototype keeps this
         default because it is easier to explain, test, and debug.
     """
+    workflow_start = perf_counter()
     trace = _build_initial_trace(plan, file_path)
     trace["stop_on_failure"] = stop_on_failure
 
     if not plan.get("success"):
         trace["execution_status"] = PLANNING_FAILED_STATUS
+        trace["elapsed_seconds"] = round(perf_counter() - workflow_start, 4)
         return {
             "success": False,
             "is_workflow": plan.get("is_workflow", False),
@@ -125,11 +230,20 @@ def run_workflow_plan(
             "suggestion": plan.get("suggestion"),
             "step_results": [],
             "outputs": {},
+            "generated_files": [],
+            "workflow_summary": _build_workflow_summary(
+                plan=plan,
+                step_results=[],
+                generated_files=[],
+                workflow_status=PLANNING_FAILED_STATUS,
+                elapsed_seconds=trace["elapsed_seconds"],
+            ),
             "trace": trace,
         }
 
     if not plan.get("is_workflow"):
         trace["execution_status"] = NOT_WORKFLOW_STATUS
+        trace["elapsed_seconds"] = round(perf_counter() - workflow_start, 4)
         return {
             "success": False,
             "is_workflow": False,
@@ -139,12 +253,21 @@ def run_workflow_plan(
             "error": plan.get("reason", "当前输入不是 workflow 请求。"),
             "step_results": [],
             "outputs": {},
+            "generated_files": [],
+            "workflow_summary": _build_workflow_summary(
+                plan=plan,
+                step_results=[],
+                generated_files=[],
+                workflow_status=NOT_WORKFLOW_STATUS,
+                elapsed_seconds=trace["elapsed_seconds"],
+            ),
             "trace": trace,
         }
 
     steps = plan.get("steps", [])
     step_results: list[dict[str, Any]] = []
     outputs: dict[str, Any] = {}
+    generated_files: list[str] = []
 
     trace["execution_status"] = "running"
 
@@ -152,6 +275,7 @@ def run_workflow_plan(
         tool_name = step.get("tool_name")
         arguments = step.get("arguments", {}) or {}
 
+        step_start = perf_counter()
         execution_result = route_llm_tool_call(
             llm_tool_call={
                 "tool_name": tool_name,
@@ -159,23 +283,34 @@ def run_workflow_plan(
             },
             file_path=file_path,
         )
+        elapsed_seconds = perf_counter() - step_start
 
         step_result = _build_step_result(
             step_index=index,
             step=step,
             execution_result=execution_result,
+            elapsed_seconds=elapsed_seconds,
         )
         step_results.append(step_result)
+
+        for output_path in step_result.get("output_paths", []):
+            if output_path not in generated_files:
+                generated_files.append(output_path)
 
         output_key = step.get("output_key")
         if output_key and step_result["success"]:
             outputs[output_key] = _summarize_tool_result(step_result.get("tool_result"))
+
+        trace["step_traces"].append(_build_step_trace(step_result, elapsed_seconds))
+        trace["generated_files"] = generated_files
 
         if not step_result["success"] and stop_on_failure:
             trace["execution_status"] = TERMINAL_FAILED_STATUS
             trace["completed_steps"] = len([item for item in step_results if item.get("success")])
             trace["failed_step_id"] = step_result.get("step_id")
             trace["failed_tool_name"] = step_result.get("tool_name")
+            trace["failed_step_count"] = len([item for item in step_results if not item.get("success")])
+            trace["elapsed_seconds"] = round(perf_counter() - workflow_start, 4)
 
             return {
                 "success": False,
@@ -187,6 +322,14 @@ def run_workflow_plan(
                 "failed_step": step_result,
                 "step_results": step_results,
                 "outputs": outputs,
+                "generated_files": generated_files,
+                "workflow_summary": _build_workflow_summary(
+                    plan=plan,
+                    step_results=step_results,
+                    generated_files=generated_files,
+                    workflow_status=TERMINAL_FAILED_STATUS,
+                    elapsed_seconds=trace["elapsed_seconds"],
+                ),
                 "trace": trace,
             }
 
@@ -196,6 +339,7 @@ def run_workflow_plan(
         trace["execution_status"] = TERMINAL_FAILED_STATUS
         trace["completed_steps"] = len([item for item in step_results if item.get("success")])
         trace["failed_step_count"] = len(failed_steps)
+        trace["elapsed_seconds"] = round(perf_counter() - workflow_start, 4)
 
         return {
             "success": False,
@@ -207,12 +351,21 @@ def run_workflow_plan(
             "failed_steps": failed_steps,
             "step_results": step_results,
             "outputs": outputs,
+            "generated_files": generated_files,
+            "workflow_summary": _build_workflow_summary(
+                plan=plan,
+                step_results=step_results,
+                generated_files=generated_files,
+                workflow_status=TERMINAL_FAILED_STATUS,
+                elapsed_seconds=trace["elapsed_seconds"],
+            ),
             "trace": trace,
         }
 
     trace["execution_status"] = TERMINAL_SUCCESS_STATUS
     trace["completed_steps"] = len(step_results)
     trace["failed_step_count"] = 0
+    trace["elapsed_seconds"] = round(perf_counter() - workflow_start, 4)
 
     return {
         "success": True,
@@ -222,6 +375,14 @@ def run_workflow_plan(
         "workflow_status": TERMINAL_SUCCESS_STATUS,
         "step_results": step_results,
         "outputs": outputs,
+        "generated_files": generated_files,
+        "workflow_summary": _build_workflow_summary(
+            plan=plan,
+            step_results=step_results,
+            generated_files=generated_files,
+            workflow_status=TERMINAL_SUCCESS_STATUS,
+            elapsed_seconds=trace["elapsed_seconds"],
+        ),
         "trace": trace,
     }
 
@@ -258,6 +419,19 @@ def run_workflow(
     return result
 
 
+def _format_arguments(arguments: dict[str, Any] | None) -> str:
+    """
+    Format step arguments for human-readable workflow output.
+    """
+    if not arguments:
+        return "无"
+
+    return ", ".join(
+        f"{key}={value}"
+        for key, value in arguments.items()
+    )
+
+
 def format_workflow_result(result: dict[str, Any]) -> str:
     """
     Format workflow execution result for CLI-style display.
@@ -274,12 +448,31 @@ def format_workflow_result(result: dict[str, Any]) -> str:
             message += f"\n建议：{result['suggestion']}"
         return message
 
+    summary = result.get("workflow_summary", {}) or {}
+
     lines = [
         f"Workflow 执行结果：{result.get('workflow_display_name') or result.get('workflow_name')}",
         f"状态：{'成功' if result.get('success') else '失败'}",
+    ]
+
+    sort_by = summary.get("sort_by")
+    if sort_by:
+        sort_by_name = summary.get("sort_by_name") or sort_by
+        lines.append(f"排序指标：{sort_by_name} ({sort_by})")
+
+    lines.extend([
+        (
+            "步骤概览："
+            f"计划 {summary.get('planned_step_count', len(result.get('step_results', [])))} 步，"
+            f"执行 {summary.get('executed_step_count', len(result.get('step_results', [])))} 步，"
+            f"成功 {summary.get('successful_step_count', 0)} 步，"
+            f"失败 {summary.get('failed_step_count', 0)} 步"
+        ),
+        f"生成文件数：{summary.get('generated_file_count', len(result.get('generated_files', [])))}",
+        f"总耗时：{summary.get('elapsed_seconds', result.get('trace', {}).get('elapsed_seconds', 0))} 秒",
         "",
         "执行步骤：",
-    ]
+    ])
 
     for step_result in result.get("step_results", []):
         status_text = "成功" if step_result.get("success") else "失败"
@@ -288,15 +481,33 @@ def format_workflow_result(result: dict[str, Any]) -> str:
             f"{step_result.get('description')} "
             f"(tool: {step_result.get('tool_name')})"
         )
-        if step_result.get("error"):
-            line += f"\n   错误：{step_result.get('error')}"
         lines.append(line)
+        lines.append(f"   参数：{_format_arguments(step_result.get('arguments'))}")
+        lines.append(f"   耗时：{step_result.get('elapsed_seconds', 0)} 秒")
+
+        if step_result.get("output_paths"):
+            lines.append("   输出文件：")
+            for output_path in step_result["output_paths"]:
+                lines.append(f"   - {output_path}")
+
+        if step_result.get("error"):
+            lines.append(f"   错误：{step_result.get('error')}")
+
+    generated_files = result.get("generated_files") or summary.get("generated_files") or []
+    if generated_files:
+        lines.append("")
+        lines.append("本次 Workflow 生成文件：")
+        for output_path in generated_files:
+            lines.append(f"- {output_path}")
 
     if result.get("outputs"):
         lines.append("")
         lines.append("关键输出：")
         for output_key, output_value in result["outputs"].items():
-            if output_value.get("output_path"):
+            output_paths = output_value.get("output_paths") or []
+            if output_paths:
+                lines.append(f"- {output_key}: {output_paths[0]}")
+            elif output_value.get("output_path"):
                 lines.append(f"- {output_key}: {output_value['output_path']}")
             elif output_value.get("message"):
                 lines.append(f"- {output_key}: {output_value['message']}")
