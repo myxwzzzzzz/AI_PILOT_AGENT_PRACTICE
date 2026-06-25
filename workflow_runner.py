@@ -18,6 +18,7 @@ from typing import Any
 
 from llm_router import route_llm_tool_call
 from workflow_planner import format_workflow_plan, plan_workflow
+from workflow_summary_report import generate_workflow_summary_report
 
 
 TERMINAL_SUCCESS_STATUS = "success"
@@ -194,6 +195,56 @@ def _build_workflow_summary(
     }
 
 
+
+
+def _attach_workflow_summary_report(result: dict[str, Any], file_path: str) -> dict[str, Any]:
+    """
+    Generate and attach a workflow-level Markdown summary report.
+
+    The summary report is a workflow-level artifact, different from the
+    underlying tool reports. If report generation fails, the workflow execution
+    result is still returned; the summary report error is recorded in trace.
+    """
+    if not result.get("is_workflow") or not result.get("step_results"):
+        return result
+
+    try:
+        report_result = generate_workflow_summary_report(
+            workflow_result=result,
+            file_path=file_path,
+        )
+    except Exception as exc:  # pragma: no cover - defensive guard
+        result.setdefault("trace", {})["workflow_summary_report"] = {
+            "success": False,
+            "error": str(exc),
+        }
+        return result
+
+    result.setdefault("outputs", {})["workflow_summary_report"] = {
+        "success": report_result.get("success"),
+        "message": report_result.get("message"),
+        "output_path": report_result.get("output_path"),
+    }
+
+    output_path = report_result.get("output_path")
+    if output_path:
+        generated_files = result.setdefault("generated_files", [])
+        if output_path not in generated_files:
+            generated_files.append(output_path)
+
+        summary = result.setdefault("workflow_summary", {})
+        summary["generated_files"] = generated_files
+        summary["generated_file_count"] = len(generated_files)
+
+        trace = result.setdefault("trace", {})
+        trace["generated_files"] = generated_files
+        trace["workflow_summary_report"] = {
+            "success": report_result.get("success"),
+            "output_path": output_path,
+        }
+
+    return result
+
 def run_workflow_plan(
     plan: dict[str, Any],
     file_path: str,
@@ -312,7 +363,7 @@ def run_workflow_plan(
             trace["failed_step_count"] = len([item for item in step_results if not item.get("success")])
             trace["elapsed_seconds"] = round(perf_counter() - workflow_start, 4)
 
-            return {
+            result = {
                 "success": False,
                 "is_workflow": True,
                 "workflow_name": plan.get("workflow_name"),
@@ -332,6 +383,7 @@ def run_workflow_plan(
                 ),
                 "trace": trace,
             }
+            return _attach_workflow_summary_report(result, file_path)
 
     failed_steps = [step_result for step_result in step_results if not step_result.get("success")]
 
@@ -341,7 +393,7 @@ def run_workflow_plan(
         trace["failed_step_count"] = len(failed_steps)
         trace["elapsed_seconds"] = round(perf_counter() - workflow_start, 4)
 
-        return {
+        result = {
             "success": False,
             "is_workflow": True,
             "workflow_name": plan.get("workflow_name"),
@@ -361,13 +413,14 @@ def run_workflow_plan(
             ),
             "trace": trace,
         }
+        return _attach_workflow_summary_report(result, file_path)
 
     trace["execution_status"] = TERMINAL_SUCCESS_STATUS
     trace["completed_steps"] = len(step_results)
     trace["failed_step_count"] = 0
     trace["elapsed_seconds"] = round(perf_counter() - workflow_start, 4)
 
-    return {
+    result = {
         "success": True,
         "is_workflow": True,
         "workflow_name": plan.get("workflow_name"),
@@ -385,6 +438,7 @@ def run_workflow_plan(
         ),
         "trace": trace,
     }
+    return _attach_workflow_summary_report(result, file_path)
 
 
 def run_workflow(

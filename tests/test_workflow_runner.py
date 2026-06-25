@@ -256,15 +256,18 @@ def test_run_workflow_plan_collects_generated_file_paths(restore_tool_handlers):
     result = run_workflow_plan(plan=deepcopy(plan), file_path=STOCK_FILE_PATH)
 
     assert result["success"] is True
-    assert result["generated_files"] == [
+    assert result["generated_files"][:2] == [
         "data/output/reports/stock_metrics_report.md",
         "data/output/charts/parameter_scan_sharpe_ratio.png",
     ]
+    assert result["generated_files"][-1] == "data/output/reports/workflow_summary_report_sharpe_ratio.md"
     assert result["outputs"]["scan_chart"]["primary_output_path"] == "data/output/charts/parameter_scan_sharpe_ratio.png"
     assert result["step_results"][1]["output_paths"] == ["data/output/charts/parameter_scan_sharpe_ratio.png"]
     assert result["trace"]["generated_files"] == result["generated_files"]
     assert result["trace"]["step_traces"][1]["arguments"] == {"sort_by": "sharpe_ratio"}
-    assert result["workflow_summary"]["generated_file_count"] == 2
+    assert result["workflow_summary"]["generated_file_count"] == 3
+    assert result["outputs"]["workflow_summary_report"]["output_path"] == "data/output/reports/workflow_summary_report_sharpe_ratio.md"
+    assert result["trace"]["workflow_summary_report"]["success"] is True
 
 
 def test_format_workflow_result_includes_step_status(restore_tool_handlers):
@@ -334,3 +337,40 @@ def test_format_workflow_result_includes_generated_files_and_arguments(restore_t
     assert "参数：sort_by=sharpe_ratio" in formatted
     assert "本次 Workflow 生成文件" in formatted
     assert "data/output/charts/parameter_scan_sharpe_ratio.png" in formatted
+
+
+def test_run_workflow_plan_adds_workflow_summary_report_to_outputs(restore_tool_handlers):
+    calls: list[str] = []
+    _get_tool("read_stock_price_data")["handler"] = _make_success_handler("read_stock_price_data", calls)
+
+    plan = {
+        "success": True,
+        "is_workflow": True,
+        "workflow_name": "test_workflow",
+        "workflow_display_name": "测试工作流",
+        "planning_metadata": {
+            "sort_by": "sharpe_ratio",
+            "sort_by_name": "夏普比率",
+        },
+        "steps": [
+            {
+                "step_id": "read_data",
+                "description": "读取数据",
+                "tool_name": "read_stock_price_data",
+                "arguments": {},
+                "output_key": "data_overview",
+            },
+        ],
+    }
+
+    result = run_workflow_plan(plan=deepcopy(plan), file_path=STOCK_FILE_PATH)
+
+    assert result["success"] is True
+    assert result["outputs"]["workflow_summary_report"]["success"] is True
+    assert result["outputs"]["workflow_summary_report"]["output_path"].endswith(
+        "workflow_summary_report_sharpe_ratio.md"
+    )
+    assert result["generated_files"] == [
+        "data/output/reports/workflow_summary_report_sharpe_ratio.md"
+    ]
+    assert result["workflow_summary"]["generated_file_count"] == 1
