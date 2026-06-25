@@ -131,3 +131,24 @@ def test_build_workflow_summary_markdown_includes_judgement_section():
     assert "最大回撤相对可控" in markdown
     assert "仍可能存在过拟合风险" in markdown
     assert "建议加入交易成本验证" in markdown
+
+
+def test_build_workflow_summary_markdown_includes_final_summary_section():
+    workflow_result = _sample_workflow_result()
+    workflow_result["workflow_final_summary"] = {
+        "success": True,
+        "summary_source": "local_fallback",
+        "provider": "local_rules",
+        "fallback_reason": "未检测到 DEEPSEEK_API_KEY",
+        "summary_text": "本次 workflow 已完成，并建议优先查看策略研究总结报告。",
+    }
+
+    markdown = build_workflow_summary_markdown(
+        workflow_result,
+        file_path="data/stock_price_strategy.csv",
+    )
+
+    assert "Workflow 自然语言总结" in markdown
+    assert "local_fallback" in markdown
+    assert "本次 workflow 已完成" in markdown
+    assert "未检测到 DEEPSEEK_API_KEY" in markdown

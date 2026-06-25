@@ -133,6 +133,31 @@ def _format_judgement_section(judgement: dict[str, Any] | None) -> str:
     return "\n".join(lines)
 
 
+def _format_final_summary_section(final_summary: dict[str, Any] | None) -> str:
+    """
+    Format optional workflow final summary for Markdown reports.
+    """
+    if not isinstance(final_summary, dict) or not final_summary.get("summary_text"):
+        return "暂无 Workflow 自然语言总结。"
+
+    lines = [
+        f"- 总结来源：{_safe_text(final_summary.get('summary_source'))}",
+    ]
+
+    if final_summary.get("provider"):
+        lines.append(f"- Provider：{_safe_text(final_summary.get('provider'))}")
+    if final_summary.get("model"):
+        lines.append(f"- Model：{_safe_text(final_summary.get('model'))}")
+    if final_summary.get("fallback_reason"):
+        lines.append(f"- Fallback 原因：{_safe_text(final_summary.get('fallback_reason'))}")
+
+    lines.extend([
+        "",
+        final_summary.get("summary_text", ""),
+    ])
+    return "\n".join(lines)
+
+
 def _build_review_order(generated_files: list[str]) -> str:
     """
     Build a simple suggested review order based on generated file names.
@@ -230,13 +255,19 @@ def build_workflow_summary_markdown(
 
 ---
 
-## 7. 失败信息
+## 7. Workflow 自然语言总结
+
+{_format_final_summary_section(workflow_result.get("workflow_final_summary"))}
+
+---
+
+## 8. 失败信息
 
 {failed_reason}
 
 ---
 
-## 8. 说明
+## 9. 说明
 
 本报告是 Workflow 层的汇总报告。它不会替代单个工具生成的专业报告，而是用于说明本次多步任务执行了哪些步骤、生成了哪些文件，以及用户应该按什么顺序查看这些结果。
 """

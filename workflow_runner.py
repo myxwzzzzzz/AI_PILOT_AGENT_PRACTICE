@@ -19,6 +19,7 @@ from typing import Any
 from llm_router import route_llm_tool_call
 from workflow_planner import format_workflow_plan, plan_workflow
 from workflow_evaluator import evaluate_workflow_result
+from workflow_llm_summarizer import generate_workflow_final_summary
 from workflow_summary_report import generate_workflow_summary_report
 
 
@@ -220,6 +221,30 @@ def _attach_workflow_judgement(result: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+
+
+def _attach_workflow_final_summary(result: dict[str, Any]) -> dict[str, Any]:
+    """
+    Attach optional LLM/local natural-language summary to workflow result.
+
+    This layer summarizes the already executed workflow. It does not execute
+    tools and does not affect workflow success status. DeepSeek failures are
+    handled inside generate_workflow_final_summary with local fallback.
+    """
+    if not result.get("is_workflow") or not result.get("step_results"):
+        return result
+
+    final_summary = generate_workflow_final_summary(result)
+    result["workflow_final_summary"] = final_summary
+    result.setdefault("trace", {})["workflow_final_summary"] = {
+        "success": final_summary.get("success"),
+        "summary_source": final_summary.get("summary_source"),
+        "provider": final_summary.get("provider"),
+        "model": final_summary.get("model"),
+        "fallback_reason": final_summary.get("fallback_reason"),
+    }
+    return result
+
 def _attach_workflow_summary_report(result: dict[str, Any], file_path: str) -> dict[str, Any]:
     """
     Generate and attach a workflow-level Markdown summary report.
@@ -406,7 +431,7 @@ def run_workflow_plan(
                 ),
                 "trace": trace,
             }
-            return _attach_workflow_summary_report(_attach_workflow_judgement(result), file_path)
+            return _attach_workflow_summary_report(_attach_workflow_final_summary(_attach_workflow_judgement(result)), file_path)
 
     failed_steps = [step_result for step_result in step_results if not step_result.get("success")]
 
@@ -436,7 +461,7 @@ def run_workflow_plan(
             ),
             "trace": trace,
         }
-        return _attach_workflow_summary_report(_attach_workflow_judgement(result), file_path)
+        return _attach_workflow_summary_report(_attach_workflow_final_summary(_attach_workflow_judgement(result)), file_path)
 
     trace["execution_status"] = TERMINAL_SUCCESS_STATUS
     trace["completed_steps"] = len(step_results)
@@ -461,7 +486,7 @@ def run_workflow_plan(
         ),
         "trace": trace,
     }
-    return _attach_workflow_summary_report(_attach_workflow_judgement(result), file_path)
+    return _attach_workflow_summary_report(_attach_workflow_final_summary(_attach_workflow_judgement(result)), file_path)
 
 
 def run_workflow(
@@ -561,6 +586,15 @@ def format_workflow_result(result: dict[str, Any]) -> str:
         ])
         for warning in judgement.get("warnings", [])[:3]:
             lines.append(f"- 风险提示：{warning}")
+
+    final_summary = result.get("workflow_final_summary") or {}
+    if final_summary.get("summary_text"):
+        source = final_summary.get("summary_source") or "unknown"
+        lines.extend([
+            "",
+            f"Workflow 自然语言总结（source: {source}）：",
+            final_summary["summary_text"],
+        ])
 
     lines.extend([
         "",

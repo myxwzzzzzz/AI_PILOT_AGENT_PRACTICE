@@ -442,3 +442,70 @@ def test_run_workflow_plan_attaches_rule_based_judgement(restore_tool_handlers):
     formatted = format_workflow_result(result)
     assert "结果判断" in formatted
     assert "综合判断：具备继续研究价值" in formatted
+
+
+def test_run_workflow_plan_attaches_local_final_summary(restore_tool_handlers, monkeypatch):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    calls: list[str] = []
+    _get_tool("read_stock_price_data")["handler"] = _make_success_handler("read_stock_price_data", calls)
+
+    plan = {
+        "success": True,
+        "is_workflow": True,
+        "workflow_name": "test_workflow",
+        "workflow_display_name": "测试工作流",
+        "planning_metadata": {
+            "sort_by": "sharpe_ratio",
+            "sort_by_name": "夏普比率",
+        },
+        "steps": [
+            {
+                "step_id": "read_data",
+                "description": "读取数据",
+                "tool_name": "read_stock_price_data",
+                "arguments": {},
+                "output_key": "data_overview",
+            },
+        ],
+    }
+
+    result = run_workflow_plan(plan=deepcopy(plan), file_path=STOCK_FILE_PATH)
+
+    assert result["success"] is True
+    assert result["workflow_final_summary"]["success"] is True
+    assert result["workflow_final_summary"]["summary_source"] == "local_fallback"
+    assert "执行状态为成功" in result["workflow_final_summary"]["summary_text"]
+    assert result["trace"]["workflow_final_summary"]["summary_source"] == "local_fallback"
+
+
+def test_format_workflow_result_includes_final_summary(restore_tool_handlers, monkeypatch):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    calls: list[str] = []
+    _get_tool("read_stock_price_data")["handler"] = _make_success_handler("read_stock_price_data", calls)
+
+    plan = {
+        "success": True,
+        "is_workflow": True,
+        "workflow_name": "test_workflow",
+        "workflow_display_name": "测试工作流",
+        "planning_metadata": {
+            "sort_by": "sharpe_ratio",
+            "sort_by_name": "夏普比率",
+        },
+        "steps": [
+            {
+                "step_id": "read_data",
+                "description": "读取数据",
+                "tool_name": "read_stock_price_data",
+                "arguments": {},
+                "output_key": "data_overview",
+            },
+        ],
+    }
+
+    result = run_workflow_plan(plan=deepcopy(plan), file_path=STOCK_FILE_PATH)
+    formatted = format_workflow_result(result)
+
+    assert "Workflow 自然语言总结" in formatted
+    assert "source: local_fallback" in formatted
+    assert "执行状态为成功" in formatted
