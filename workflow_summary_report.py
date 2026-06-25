@@ -103,6 +103,36 @@ def _format_generated_files(generated_files: list[str]) -> str:
     return "\n".join(f"- `{path}`" for path in generated_files)
 
 
+def _format_judgement_section(judgement: dict[str, Any] | None) -> str:
+    """
+    Format workflow judgement metadata for Markdown reports.
+    """
+    if not isinstance(judgement, dict) or not judgement.get("success"):
+        return "暂无结果判断。"
+
+    lines = [
+        f"- 综合判断：{_safe_text(judgement.get('overall_label'))}",
+        f"- 风险等级：{_safe_text(judgement.get('risk_level'))}",
+        f"- 策略质量：{_safe_text(judgement.get('quality_level'))}",
+        f"- 超额收益判断：{_safe_text(judgement.get('excess_return_level'))}",
+        "",
+        "### 6.1 主要发现",
+    ]
+
+    for finding in judgement.get("findings", []) or []:
+        lines.append(f"- {finding}")
+
+    lines.extend(["", "### 6.2 风险提示"])
+    for warning in judgement.get("warnings", []) or []:
+        lines.append(f"- {warning}")
+
+    lines.extend(["", "### 6.3 后续建议"])
+    for suggestion in judgement.get("suggestions", []) or []:
+        lines.append(f"- {suggestion}")
+
+    return "\n".join(lines)
+
+
 def _build_review_order(generated_files: list[str]) -> str:
     """
     Build a simple suggested review order based on generated file names.
@@ -194,13 +224,19 @@ def build_workflow_summary_markdown(
 
 ---
 
-## 6. 失败信息
+## 6. Workflow 结果判断
+
+{_format_judgement_section(workflow_result.get("workflow_judgement"))}
+
+---
+
+## 7. 失败信息
 
 {failed_reason}
 
 ---
 
-## 7. 说明
+## 8. 说明
 
 本报告是 Workflow 层的汇总报告。它不会替代单个工具生成的专业报告，而是用于说明本次多步任务执行了哪些步骤、生成了哪些文件，以及用户应该按什么顺序查看这些结果。
 """

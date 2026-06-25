@@ -18,6 +18,7 @@ from typing import Any
 
 from llm_router import route_llm_tool_call
 from workflow_planner import format_workflow_plan, plan_workflow
+from workflow_evaluator import evaluate_workflow_result
 from workflow_summary_report import generate_workflow_summary_report
 
 
@@ -195,6 +196,28 @@ def _build_workflow_summary(
     }
 
 
+
+
+def _attach_workflow_judgement(result: dict[str, Any]) -> dict[str, Any]:
+    """
+    Attach deterministic judgement metadata to a workflow result.
+
+    The judgement layer reads existing step outputs and adds risk / quality
+    findings. It does not change whether the workflow itself succeeded.
+    """
+    judgement = evaluate_workflow_result(result)
+    result["workflow_judgement"] = judgement
+    result.setdefault("trace", {})["workflow_judgement"] = {
+        "evaluation_status": judgement.get("evaluation_status"),
+        "overall_label": judgement.get("overall_label"),
+        "risk_level": judgement.get("risk_level"),
+        "quality_level": judgement.get("quality_level"),
+        "excess_return_level": judgement.get("excess_return_level"),
+        "finding_count": len(judgement.get("findings", [])),
+        "warning_count": len(judgement.get("warnings", [])),
+        "suggestion_count": len(judgement.get("suggestions", [])),
+    }
+    return result
 
 
 def _attach_workflow_summary_report(result: dict[str, Any], file_path: str) -> dict[str, Any]:
@@ -383,7 +406,7 @@ def run_workflow_plan(
                 ),
                 "trace": trace,
             }
-            return _attach_workflow_summary_report(result, file_path)
+            return _attach_workflow_summary_report(_attach_workflow_judgement(result), file_path)
 
     failed_steps = [step_result for step_result in step_results if not step_result.get("success")]
 
@@ -413,7 +436,7 @@ def run_workflow_plan(
             ),
             "trace": trace,
         }
-        return _attach_workflow_summary_report(result, file_path)
+        return _attach_workflow_summary_report(_attach_workflow_judgement(result), file_path)
 
     trace["execution_status"] = TERMINAL_SUCCESS_STATUS
     trace["completed_steps"] = len(step_results)
@@ -438,7 +461,7 @@ def run_workflow_plan(
         ),
         "trace": trace,
     }
-    return _attach_workflow_summary_report(result, file_path)
+    return _attach_workflow_summary_report(_attach_workflow_judgement(result), file_path)
 
 
 def run_workflow(
@@ -524,6 +547,22 @@ def format_workflow_result(result: dict[str, Any]) -> str:
         ),
         f"生成文件数：{summary.get('generated_file_count', len(result.get('generated_files', [])))}",
         f"总耗时：{summary.get('elapsed_seconds', result.get('trace', {}).get('elapsed_seconds', 0))} 秒",
+    ])
+
+    judgement = result.get("workflow_judgement") or {}
+    if judgement.get("success"):
+        lines.extend([
+            "",
+            "结果判断：",
+            f"- 综合判断：{judgement.get('overall_label')}",
+            f"- 风险等级：{judgement.get('risk_level')}",
+            f"- 策略质量：{judgement.get('quality_level')}",
+            f"- 超额收益：{judgement.get('excess_return_level')}",
+        ])
+        for warning in judgement.get("warnings", [])[:3]:
+            lines.append(f"- 风险提示：{warning}")
+
+    lines.extend([
         "",
         "执行步骤：",
     ])

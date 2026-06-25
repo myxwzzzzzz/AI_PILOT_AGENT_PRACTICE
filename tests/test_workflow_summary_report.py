@@ -106,3 +106,28 @@ def test_build_workflow_summary_markdown_handles_failed_workflow():
 
     assert "执行状态：失败" in markdown
     assert "第二步执行失败" in markdown
+
+
+def test_build_workflow_summary_markdown_includes_judgement_section():
+    workflow_result = _sample_workflow_result()
+    workflow_result["workflow_judgement"] = {
+        "success": True,
+        "overall_label": "具备继续研究价值",
+        "risk_level": "low",
+        "quality_level": "good",
+        "excess_return_level": "positive",
+        "findings": ["最大回撤相对可控。"],
+        "warnings": ["仍可能存在过拟合风险。"],
+        "suggestions": ["建议加入交易成本验证。"],
+    }
+
+    markdown = build_workflow_summary_markdown(
+        workflow_result,
+        file_path=STOCK_FILE_PATH,
+    )
+
+    assert "Workflow 结果判断" in markdown
+    assert "综合判断：具备继续研究价值" in markdown
+    assert "最大回撤相对可控" in markdown
+    assert "仍可能存在过拟合风险" in markdown
+    assert "建议加入交易成本验证" in markdown

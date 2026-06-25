@@ -374,3 +374,71 @@ def test_run_workflow_plan_adds_workflow_summary_report_to_outputs(restore_tool_
         "data/output/reports/workflow_summary_report_sharpe_ratio.md"
     ]
     assert result["workflow_summary"]["generated_file_count"] == 1
+
+
+def test_run_workflow_plan_attaches_rule_based_judgement(restore_tool_handlers):
+    calls: list[str] = []
+    def metrics_handler(file_path: str, **kwargs):
+        calls.append("calculate_stock_metrics")
+        return {
+            "success": True,
+            "total_return": 0.12,
+            "max_drawdown": -0.08,
+            "sharpe_ratio": 0.9,
+        }
+
+    def scan_handler(file_path: str, **kwargs):
+        calls.append("optimize_moving_average_parameters")
+        return {
+            "success": True,
+            "sort_by": "sharpe_ratio",
+            "total_combinations": 2,
+            "best_result": {
+                "strategy_name": "MA5-MA10",
+                "strategy_total_return": 0.2,
+                "excess_return": 0.08,
+                "max_drawdown": -0.07,
+                "sharpe_ratio": 1.2,
+            },
+        }
+
+    _get_tool("calculate_stock_metrics")["handler"] = metrics_handler
+    _get_tool("optimize_moving_average_parameters")["handler"] = scan_handler
+
+    plan = {
+        "success": True,
+        "is_workflow": True,
+        "workflow_name": "test_workflow",
+        "workflow_display_name": "测试工作流",
+        "planning_metadata": {
+            "sort_by": "sharpe_ratio",
+            "sort_by_name": "夏普比率",
+        },
+        "steps": [
+            {
+                "step_id": "metrics",
+                "description": "计算指标",
+                "tool_name": "calculate_stock_metrics",
+                "arguments": {},
+                "output_key": "metrics",
+            },
+            {
+                "step_id": "scan",
+                "description": "扫描参数",
+                "tool_name": "optimize_moving_average_parameters",
+                "arguments": {"sort_by": "sharpe_ratio"},
+                "output_key": "scan",
+            },
+        ],
+    }
+
+    result = run_workflow_plan(plan=deepcopy(plan), file_path=STOCK_FILE_PATH)
+
+    assert result["success"] is True
+    assert result["workflow_judgement"]["success"] is True
+    assert result["workflow_judgement"]["overall_label"] == "具备继续研究价值"
+    assert result["workflow_judgement"]["risk_level"] == "low"
+    assert result["trace"]["workflow_judgement"]["evaluation_status"] == "completed"
+    formatted = format_workflow_result(result)
+    assert "结果判断" in formatted
+    assert "综合判断：具备继续研究价值" in formatted
