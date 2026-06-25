@@ -9,6 +9,11 @@ def format_response(route_result: dict) -> str:
     """
     将路由器返回的工具结果，格式化为自然语言回答。
     """
+    if route_result.get("is_workflow"):
+        from workflow_runner import format_workflow_result
+
+        return format_workflow_result(route_result)
+
     if route_result.get("answer_type") == "rag_qa":
         answer = route_result.get("answer", "")
 

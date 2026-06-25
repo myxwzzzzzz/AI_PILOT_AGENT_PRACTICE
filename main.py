@@ -3,10 +3,11 @@ from cli_command_handler import handle_cli_command, format_current_file_info
 
 from config import ensure_output_dirs
 from router import route_task
-from llm_agent_runner import run_llm_agent_task
 from response_formatter import format_response
 from trace_formatter import format_trace
 from logger import write_tool_log
+from workflow_planner import is_workflow_request
+from workflow_runner import run_workflow
 
 
 def print_startup_message(state: AppState) -> None:
@@ -41,6 +42,8 @@ def print_startup_message(state: AppState) -> None:
     print("21. 开启RAG模式")
     print("22. 检查LLM连接")
     print("23. MA5-MA10 策略适合震荡行情吗？")
+    print("24. 切换文件 data/stock_price_strategy.csv")
+    print("25. 完整分析股票数据，并按夏普比率生成策略研究报告")
     print("\n输入 exit、quit 或 退出 可以结束程序")
     print("=" * 80)
 
@@ -49,10 +52,22 @@ def run_agent_task(user_input: str, state: AppState) -> dict:
     """
     根据当前模式运行任务。
 
-    - 规则模式：route_task
+    - Workflow 请求：优先交给 workflow runner 执行多步任务
     - LLM 模式：run_llm_agent_task
+    - 规则模式：route_task
+
+    Workflow 判断放在 LLM / rule router 之前，是为了让“完整分析 / 综合研究”
+    这类多步目标能直接走任务编排，而不是被误分发成某个单步工具。
     """
+    if is_workflow_request(user_input):
+        return run_workflow(
+            user_input=user_input,
+            file_path=state.current_file_path,
+        )
+
     if state.use_llm_mode:
+        from llm_agent_runner import run_llm_agent_task
+
         return run_llm_agent_task(
             user_input=user_input,
             file_path=state.current_file_path,

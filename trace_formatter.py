@@ -7,6 +7,10 @@ def format_trace(route_result: dict) -> str:
     if not trace:
         return "暂无工具调用轨迹。"
 
+
+    if trace.get("runner_type") == "rule_based_workflow_runner":
+        return format_workflow_trace(trace)
+
     if trace.get("router_type") == "rag_qa":
         lines = []
         lines.append("\n工具调用轨迹：")
@@ -150,6 +154,66 @@ def format_trace(route_result: dict) -> str:
     tool_error = trace.get("tool_error")
     if tool_error:
         lines.append(f"- 工具错误信息：{tool_error}")
+
+    return "\n".join(lines)
+
+
+def format_workflow_trace(trace: dict) -> str:
+    """
+    格式化 Workflow 执行 trace。
+
+    Workflow trace 和单步工具 trace 不同：它关心的是计划步数、
+    每一步调用的工具、参数、耗时、输出文件，以及整体是否成功。
+    """
+    lines = ["\n工具调用轨迹："]
+    lines.append("- 路由类型：Workflow 多步任务编排")
+    lines.append(f"- Workflow：{trace.get('workflow_display_name') or trace.get('workflow_name')}")
+    lines.append(f"- 当前文件：{trace.get('current_file_path')}")
+    lines.append(f"- 计划步骤数：{trace.get('planned_step_count')}")
+    lines.append(f"- 执行状态：{trace.get('execution_status')}")
+    lines.append(f"- 是否遇错停止：{trace.get('stop_on_failure')}")
+
+    if trace.get("completed_steps") is not None:
+        lines.append(f"- 已完成步骤数：{trace.get('completed_steps')}")
+
+    if trace.get("failed_step_count") is not None:
+        lines.append(f"- 失败步骤数：{trace.get('failed_step_count')}")
+
+    if trace.get("elapsed_seconds") is not None:
+        lines.append(f"- Workflow 总耗时：{trace.get('elapsed_seconds')} 秒")
+
+    step_traces = trace.get("step_traces", []) or []
+    lines.append(f"- Step trace 数：{len(step_traces)}")
+
+    if step_traces:
+        lines.append("- Step trace：")
+        for step in step_traces:
+            lines.append(
+                "  - "
+                f"#{step.get('step_index')} "
+                f"step_id={step.get('step_id')} | "
+                f"tool={step.get('tool_name')} | "
+                f"status={step.get('execution_status')} | "
+                f"elapsed={step.get('elapsed_seconds')} 秒 | "
+                f"arguments={step.get('arguments', {})}"
+            )
+
+            output_paths = step.get("output_paths") or []
+            if output_paths:
+                for output_path in output_paths:
+                    lines.append(f"    output={output_path}")
+
+            if step.get("error"):
+                lines.append(f"    error={step.get('error')}")
+
+    generated_files = trace.get("generated_files", []) or []
+    lines.append(f"- Workflow 生成文件数：{len(generated_files)}")
+    for output_path in generated_files:
+        lines.append(f"  - {output_path}")
+
+    if trace.get("failed_step_id"):
+        lines.append(f"- 失败 step_id：{trace.get('failed_step_id')}")
+        lines.append(f"- 失败工具：{trace.get('failed_tool_name')}")
 
     return "\n".join(lines)
 

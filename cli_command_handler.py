@@ -4,10 +4,7 @@ from pathlib import Path
 from cli_state import AppState
 from file_inspector import detect_file_type
 from tool_registry import TOOL_REGISTRY
-from llm_health_check import (
-    check_deepseek_connection,
-    format_llm_health_check_result,
-)
+from workflow_planner import list_supported_workflows
 
 
 @dataclass
@@ -43,6 +40,30 @@ def format_tool_list() -> str:
     for index, tool in enumerate(TOOL_REGISTRY, start=1):
         lines.append(
             f"{index}. {tool.get('name')}：{tool.get('description', '')}"
+        )
+
+    return "\n".join(lines)
+
+
+
+
+def format_workflow_list() -> str:
+    """
+    格式化当前支持的 workflow 列表。
+    """
+    workflows = list_supported_workflows()
+
+    if not workflows:
+        return "当前暂无已注册 workflow。"
+
+    lines = ["当前已支持 Workflow："]
+
+    for index, workflow in enumerate(workflows, start=1):
+        lines.append(
+            f"{index}. {workflow.get('display_name')} ({workflow.get('name')})\n"
+            f"   - 说明：{workflow.get('description')}\n"
+            f"   - 需要文件类型：{workflow.get('required_file_type_name')}\n"
+            f"   - 步骤数：{workflow.get('step_count')}"
         )
 
     return "\n".join(lines)
@@ -188,6 +209,11 @@ def handle_cli_command(user_input: str, state: AppState) -> CommandResult:
         )
 
     if text in ["检查LLM连接", "检查 LLM 连接", "测试LLM连接", "测试 LLM 连接"]:
+        from llm_health_check import (
+            check_deepseek_connection,
+            format_llm_health_check_result,
+        )
+
         result = check_deepseek_connection()
         return CommandResult(
             handled=True,
@@ -198,6 +224,12 @@ def handle_cli_command(user_input: str, state: AppState) -> CommandResult:
         return CommandResult(
             handled=True,
             message=format_tool_list()
+        )
+
+    if text in ["查看工作流", "工作流列表", "查看Workflow", "查看 workflow"]:
+        return CommandResult(
+            handled=True,
+            message=format_workflow_list()
         )
 
     if text in ["查看日志", "最近日志"]:
