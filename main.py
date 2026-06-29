@@ -8,6 +8,8 @@ from trace_formatter import format_trace
 from logger import write_tool_log
 from workflow_planner import is_workflow_request
 from workflow_runner import run_workflow
+from file_inspector import detect_file_type
+from skill_router import route_skill
 
 
 def print_startup_message(state: AppState) -> None:
@@ -44,8 +46,55 @@ def print_startup_message(state: AppState) -> None:
     print("23. MA5-MA10 策略适合震荡行情吗？")
     print("24. 切换文件 data/stock_price_strategy.csv")
     print("25. 完整分析股票数据，并按夏普比率生成策略研究报告")
+    print("26. 查看技能")
     print("\n输入 exit、quit 或 退出 可以结束程序")
     print("=" * 80)
+
+
+def _get_current_file_type(file_path: str) -> str | None:
+    """
+    识别当前文件类型，失败时返回 None。
+    """
+    file_info = detect_file_type(file_path)
+    if not file_info.get("success"):
+        return None
+    return file_info.get("file_type")
+
+
+def _compact_skill_route(skill_route: dict) -> dict:
+    """
+    将 skill route 压缩成适合放入 trace 的小结构。
+    """
+    return {
+        "success": skill_route.get("success"),
+        "skill_name": skill_route.get("skill_name"),
+        "skill_display_name": skill_route.get("skill_display_name"),
+        "confidence": skill_route.get("confidence"),
+        "reason": skill_route.get("reason"),
+        "matched_keywords": skill_route.get("matched_keywords", []),
+        "current_file_type": skill_route.get("current_file_type"),
+        "required_file_type": skill_route.get("required_file_type"),
+        "file_type_compatible": skill_route.get("file_type_compatible"),
+    }
+
+
+def _attach_skill_route(route_result: dict, skill_route: dict) -> dict:
+    """
+    将 Skill 路由信息附加到任务结果和 trace 中。
+
+    这一步不改变原有工具或 workflow 的执行结果，只增加可观测性。
+    """
+    if not isinstance(route_result, dict):
+        return route_result
+
+    compact_route = _compact_skill_route(skill_route)
+    route_result["skill_route"] = compact_route
+
+    trace = route_result.setdefault("trace", {})
+    if isinstance(trace, dict):
+        trace["skill_route"] = compact_route
+
+    return route_result
 
 
 def run_agent_task(user_input: str, state: AppState) -> dict:
@@ -59,16 +108,23 @@ def run_agent_task(user_input: str, state: AppState) -> dict:
     Workflow 判断放在 LLM / rule router 之前，是为了让“完整分析 / 综合研究”
     这类多步目标能直接走任务编排，而不是被误分发成某个单步工具。
     """
+    current_file_type = _get_current_file_type(state.current_file_path)
+    skill_route = route_skill(
+        user_input=user_input,
+        current_file_type=current_file_type,
+    )
+
     if is_workflow_request(user_input):
-        return run_workflow(
+        workflow_result = run_workflow(
             user_input=user_input,
             file_path=state.current_file_path,
         )
+        return _attach_skill_route(workflow_result, skill_route)
 
     if state.use_llm_mode:
         from llm_agent_runner import run_llm_agent_task
 
-        return run_llm_agent_task(
+        llm_result = run_llm_agent_task(
             user_input=user_input,
             file_path=state.current_file_path,
             selector_mode=state.llm_selector_mode,
@@ -77,11 +133,13 @@ def run_agent_task(user_input: str, state: AppState) -> dict:
             use_rag=state.use_rag_mode,
             rag_top_k=3,
         )
+        return _attach_skill_route(llm_result, skill_route)
 
-    return route_task(
+    rule_result = route_task(
         user_input=user_input,
         file_path=state.current_file_path,
     )
+    return _attach_skill_route(rule_result, skill_route)
 
 
 def main() -> None:

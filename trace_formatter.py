@@ -14,6 +14,7 @@ def format_trace(route_result: dict) -> str:
     if trace.get("router_type") == "rag_qa":
         lines = []
         lines.append("\n工具调用轨迹：")
+        lines.extend(format_skill_route_trace_lines(trace.get("skill_route")))
         lines.append("- 路由类型：RAG 知识问答模式")
         lines.append(f"- 意图类型：{trace.get('intent_type')}")
         lines.append(f"- 用户输入：{trace.get('user_input')}")
@@ -44,6 +45,7 @@ def format_trace(route_result: dict) -> str:
 
         lines = []
         lines.append("\n工具调用轨迹：")
+        lines.extend(format_skill_route_trace_lines(trace.get("skill_route")))
         lines.append("- 路由类型：LLM Tool Calling 模式")
         lines.append(f"- 意图类型：{llm_tool_call.get('intent_type')}")
         lines.append(f"- Selector 模式：{trace.get('selector_mode') or llm_tool_call.get('selector_mode')}")
@@ -80,6 +82,7 @@ def format_trace(route_result: dict) -> str:
 
     lines = []
     lines.append("工具调用轨迹：")
+    lines.extend(format_skill_route_trace_lines(trace.get("skill_route")))
 
     user_input = trace.get("user_input")
     if user_input is not None:
@@ -166,6 +169,7 @@ def format_workflow_trace(trace: dict) -> str:
     每一步调用的工具、参数、耗时、输出文件，以及整体是否成功。
     """
     lines = ["\n工具调用轨迹："]
+    lines.extend(format_skill_route_trace_lines(trace.get("skill_route")))
     lines.append("- 路由类型：Workflow 多步任务编排")
     lines.append(f"- Workflow：{trace.get('workflow_display_name') or trace.get('workflow_name')}")
     lines.append(f"- 当前文件：{trace.get('current_file_path')}")
@@ -216,6 +220,40 @@ def format_workflow_trace(trace: dict) -> str:
         lines.append(f"- 失败工具：{trace.get('failed_tool_name')}")
 
     return "\n".join(lines)
+
+
+def format_skill_route_trace_lines(skill_route: dict | None) -> list[str]:
+    """
+    格式化 Skill 路由 trace。
+    """
+    if not isinstance(skill_route, dict):
+        return []
+
+    if not skill_route.get("success"):
+        reason = skill_route.get("reason") or "未匹配到明确 Skill"
+        return [
+            "- Skill 路由：未命中",
+            f"- Skill 路由原因：{reason}",
+        ]
+
+    lines = [
+        f"- 命中 Skill：{skill_route.get('skill_display_name')} ({skill_route.get('skill_name')})",
+        f"- Skill 置信度：{skill_route.get('confidence')}",
+        f"- Skill 选择原因：{skill_route.get('reason')}",
+    ]
+
+    matched_keywords = skill_route.get("matched_keywords") or []
+    if matched_keywords:
+        lines.append(f"- Skill 命中关键词：{', '.join(matched_keywords)}")
+
+    required_file_type = skill_route.get("required_file_type") or "不限"
+    current_file_type = skill_route.get("current_file_type") or "未知"
+    compatible = skill_route.get("file_type_compatible")
+    lines.append(f"- Skill 要求文件类型：{required_file_type}")
+    lines.append(f"- 当前文件类型：{current_file_type}")
+    lines.append(f"- Skill 文件类型匹配：{'是' if compatible else '否'}")
+
+    return lines
 
 
 def format_rag_retrieval_trace_lines(retrieved_chunks: list[dict]) -> list[str]:

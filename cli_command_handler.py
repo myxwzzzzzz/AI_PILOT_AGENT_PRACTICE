@@ -5,6 +5,7 @@ from cli_state import AppState
 from file_inspector import detect_file_type
 from tool_registry import TOOL_REGISTRY
 from workflow_planner import list_supported_workflows
+from skill_registry import format_skill_list, get_skills_for_file_type
 
 
 @dataclass
@@ -45,6 +46,37 @@ def format_tool_list() -> str:
     return "\n".join(lines)
 
 
+
+def format_skill_command_list(current_file_path: str | None = None) -> str:
+    """
+    格式化 Skill 列表，并结合当前文件类型给出可用 Skill 提示。
+    """
+    base_text = format_skill_list()
+
+    if not current_file_path:
+        return base_text
+
+    file_info = detect_file_type(current_file_path)
+    current_file_type = file_info.get("file_type")
+    current_file_type_name = file_info.get("file_type_name") or "未知"
+
+    compatible_skills = get_skills_for_file_type(current_file_type)
+    compatible_names = [
+        f"{skill.get('display_name')} ({skill.get('name')})"
+        for skill in compatible_skills
+    ]
+
+    if compatible_names:
+        compatible_text = "\n".join(f"- {name}" for name in compatible_names)
+    else:
+        compatible_text = "- 当前文件类型下暂无明确匹配的 Skill。"
+
+    return (
+        f"{base_text}\n\n"
+        f"当前文件类型：{current_file_type_name} ({current_file_type or 'unknown'})\n"
+        f"当前文件可优先使用的 Skill：\n"
+        f"{compatible_text}"
+    )
 
 
 def format_workflow_list() -> str:
@@ -100,6 +132,7 @@ def handle_cli_command(user_input: str, state: AppState) -> CommandResult:
     - 开启/关闭 RAG 模式
     - 开启/关闭 trace
     - 查看工具
+    - 查看技能
     - 检查 LLM 连接
     """
     text = user_input.strip()
@@ -230,6 +263,12 @@ def handle_cli_command(user_input: str, state: AppState) -> CommandResult:
         return CommandResult(
             handled=True,
             message=format_workflow_list()
+        )
+
+    if text in ["查看技能", "技能列表", "查看Skill", "查看 skill"]:
+        return CommandResult(
+            handled=True,
+            message=format_skill_command_list(state.current_file_path)
         )
 
     if text in ["查看日志", "最近日志"]:
