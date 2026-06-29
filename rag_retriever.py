@@ -1,4 +1,5 @@
 import re
+from typing import Optional
 
 from rag_document_loader import build_document_chunks
 
@@ -92,13 +93,18 @@ def retrieve_relevant_chunks(
     query: str,
     top_k: int = 3,
     min_score: int = 1,
+    source_filter: Optional[list[str]] = None,
 ) -> list[dict]:
     """
     根据用户问题检索最相关的文档 chunk。
 
     当前是关键词检索版，不依赖 embedding。
+
+    source_filter:
+        可选的文档名过滤列表。传入后，只会从指定文档构建 chunks 并打分。
+        这使 Skill-aware RAG 可以在检索前缩小候选范围。
     """
-    chunks = build_document_chunks()
+    chunks = build_document_chunks(source_filter=source_filter)
 
     scored_chunks = []
 

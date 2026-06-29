@@ -7,12 +7,13 @@ Current supported retrieval mode:
 1. keyword: local keyword-based retrieval from rag_retriever.py
 
 Skill-aware retrieval:
-When skill_name is provided, retrieval first over-samples global keyword results,
-then prioritizes chunks whose source document is registered under that skill.
-If no skill document chunk is found, it can fall back to global retrieval.
+When skill_name is provided, retrieval first narrows candidate documents to the
+documents registered under that skill. If no skill document chunk is found, it
+can fall back to global retrieval.
 
-The goal is to keep rag_qa.py and llm_agent_runner.py independent from
-specific retrieval implementation details.
+Lesson 80 used result filtering after global retrieval.
+Lesson 81 upgrades keyword retrieval to pre-filter candidate documents before
+chunk scoring, which is the first real step toward retrieval acceleration.
 """
 
 from __future__ import annotations
@@ -22,13 +23,12 @@ from typing import Any, Optional
 from rag_retriever import retrieve_relevant_chunks
 from skill_aware_rag import (
     annotate_chunks_with_skill_scope,
-    filter_chunks_for_skill,
+    build_skill_source_filter,
     get_skill_document_names,
 )
 
 
 DEFAULT_RETRIEVAL_MODE = "keyword"
-SKILL_AWARE_OVERSAMPLE_FACTOR = 5
 
 
 def _ensure_retrieval_mode(
@@ -50,6 +50,7 @@ def _retrieve_keyword_chunks(
     query: str,
     top_k: int,
     min_score: int,
+    source_filter: Optional[list[str]] = None,
 ) -> list[dict[str, Any]]:
     """Retrieve keyword chunks and normalize metadata."""
 
@@ -57,6 +58,7 @@ def _retrieve_keyword_chunks(
         query=query,
         top_k=top_k,
         min_score=min_score,
+        source_filter=source_filter,
     )
 
     return _ensure_retrieval_mode(chunks, "keyword")
@@ -84,8 +86,8 @@ def retrieve_chunks(
     mode:
         Retrieval strategy. Currently only "keyword" is supported.
     skill_name:
-        Optional matched Skill name. When provided, RAG prioritizes documents
-        registered under that Skill.
+        Optional matched Skill name. When provided, RAG first narrows retrieval
+        to documents registered under that Skill.
     fallback_to_global:
         If True, return global retrieval results when no skill-specific chunks
         are found.
@@ -103,35 +105,40 @@ def retrieve_chunks(
                 min_score=min_score,
             )
 
-        candidate_top_k = max(
-            top_k,
-            top_k * SKILL_AWARE_OVERSAMPLE_FACTOR,
-        )
-        candidate_chunks = _retrieve_keyword_chunks(
-            query=query,
-            top_k=candidate_top_k,
-            min_score=min_score,
-        )
+        skill_document_names = build_skill_source_filter(skill_name)
 
-        skill_chunks = filter_chunks_for_skill(
-            candidate_chunks,
-            skill_name=skill_name,
-            top_k=top_k,
-        )
+        if skill_document_names:
+            skill_chunks = _retrieve_keyword_chunks(
+                query=query,
+                top_k=top_k,
+                min_score=min_score,
+                source_filter=skill_document_names,
+            )
 
-        if skill_chunks:
-            return skill_chunks
+            if skill_chunks:
+                return annotate_chunks_with_skill_scope(
+                    skill_chunks,
+                    skill_name=skill_name,
+                    skill_document_names=skill_document_names,
+                    retrieval_scope="skill_documents_prefiltered",
+                )
+
+            if not fallback_to_global:
+                return []
 
         if not fallback_to_global:
             return []
 
-        skill_document_names = get_skill_document_names(skill_name)
-        global_fallback_chunks = candidate_chunks[:top_k]
+        global_fallback_chunks = _retrieve_keyword_chunks(
+            query=query,
+            top_k=top_k,
+            min_score=min_score,
+        )
 
         return annotate_chunks_with_skill_scope(
             global_fallback_chunks,
             skill_name=skill_name,
-            skill_document_names=skill_document_names,
+            skill_document_names=get_skill_document_names(skill_name),
             retrieval_scope="global_fallback",
         )
 

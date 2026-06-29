@@ -9,11 +9,9 @@ scope. For example:
 - stock_strategy_research_skill -> ma_strategy_notes.md, risk_metrics_notes.md
 - rag_qa_skill -> all RAG knowledge documents registered in that skill
 
-The implementation is intentionally conservative:
-- It never executes tools.
-- It only filters/annotates retrieved document chunks.
-- If a skill has no documents or no chunk matches the skill documents, callers
-  can fall back to global retrieval.
+Lesson 81 upgrade:
+- The helper now supports pre-filter metadata.
+- Callers can use skill documents before retrieval, not only after global retrieval.
 """
 
 from __future__ import annotations
@@ -50,6 +48,16 @@ def get_skill_document_names(skill_name: Optional[str]) -> list[str]:
             seen.add(name)
 
     return document_names
+
+
+def build_skill_source_filter(skill_name: Optional[str]) -> list[str]:
+    """
+    Build source_filter for lower-level retrievers.
+
+    This is intentionally a thin alias around get_skill_document_names so the
+    retrieval router can clearly express pre-filtered retrieval.
+    """
+    return get_skill_document_names(skill_name)
 
 
 def chunk_matches_skill_documents(
@@ -106,7 +114,11 @@ def filter_chunks_for_skill(
     skill_name: Optional[str],
     top_k: Optional[int] = None,
 ) -> list[dict[str, Any]]:
-    """Filter retrieved chunks to documents registered by a skill."""
+    """Filter retrieved chunks to documents registered by a skill.
+
+    This remains useful for compatibility, but Lesson 81 prefers pre-filtered
+    retrieval before scoring when possible.
+    """
 
     document_names = get_skill_document_names(skill_name)
 
@@ -143,4 +155,5 @@ def build_skill_aware_retrieval_metadata(skill_name: Optional[str]) -> dict[str,
         "rag_skill_name": skill_name,
         "rag_skill_documents": document_names,
         "has_skill_documents": bool(document_names),
+        "prefilter_enabled": bool(skill_name and document_names),
     }

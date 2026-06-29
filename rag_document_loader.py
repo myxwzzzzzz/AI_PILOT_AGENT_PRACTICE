@@ -1,9 +1,25 @@
 from pathlib import Path
+from typing import Optional
 
 from config import DOCUMENT_DIR
 
 
 SUPPORTED_DOCUMENT_EXTENSIONS = [".md", ".txt"]
+
+
+def normalize_document_name(document: str | Path) -> str:
+    """
+    统一文档名，只保留文件名部分。
+
+    这样无论传入的是：
+    - risk_metrics_notes.md
+    - documents/risk_metrics_notes.md
+    - D:/xxx/documents/risk_metrics_notes.md
+
+    都会归一化为：
+    - risk_metrics_notes.md
+    """
+    return Path(str(document)).name
 
 
 def load_text_file(file_path: str | Path) -> str:
@@ -20,20 +36,43 @@ def load_text_file(file_path: str | Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def list_document_files(document_dir: str | Path = DOCUMENT_DIR) -> list[Path]:
+def list_document_files(
+    document_dir: str | Path = DOCUMENT_DIR,
+    source_filter: Optional[list[str]] = None,
+) -> list[Path]:
     """
     列出 documents 目录下支持的文档文件。
+
+    source_filter:
+        可选的文档名过滤列表。传入后，只返回文件名在该列表中的文档。
+        这是 Skill-aware RAG 前置过滤的关键：先缩小候选文档，再进入 chunk 构建和打分。
     """
     document_dir = Path(document_dir)
 
     if not document_dir.exists():
         return []
 
+    normalized_filter = None
+    if source_filter is not None:
+        normalized_filter = {
+            normalize_document_name(source)
+            for source in source_filter
+            if source
+        }
+
     files = []
 
     for path in document_dir.rglob("*"):
-        if path.is_file() and path.suffix.lower() in SUPPORTED_DOCUMENT_EXTENSIONS:
-            files.append(path)
+        if not path.is_file():
+            continue
+
+        if path.suffix.lower() not in SUPPORTED_DOCUMENT_EXTENSIONS:
+            continue
+
+        if normalized_filter is not None and path.name not in normalized_filter:
+            continue
+
+        files.append(path)
 
     return sorted(files)
 
@@ -81,9 +120,13 @@ def build_document_chunks(
     document_dir: str | Path = DOCUMENT_DIR,
     chunk_size: int = 500,
     overlap: int = 80,
+    source_filter: Optional[list[str]] = None,
 ) -> list[dict]:
     """
-    读取 documents 目录下所有文档，并切分成 chunk。
+    读取 documents 目录下的文档，并切分成 chunk。
+
+    如果 source_filter 不为空，则只加载指定文档。
+    这比“先加载所有文档，再过滤 chunk”更靠前，因此更接近真正的 Skill-aware retrieval acceleration。
 
     返回结构示例：
     {
@@ -93,7 +136,10 @@ def build_document_chunks(
         "text": "..."
     }
     """
-    document_files = list_document_files(document_dir)
+    document_files = list_document_files(
+        document_dir=document_dir,
+        source_filter=source_filter,
+    )
 
     all_chunks = []
 
