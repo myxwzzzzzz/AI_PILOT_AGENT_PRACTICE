@@ -132,6 +132,7 @@ def run_agent_task(user_input: str, state: AppState) -> dict:
             fallback_to_rule=True,
             use_rag=state.use_rag_mode,
             rag_top_k=3,
+            skill_name=skill_route.get("skill_name") if skill_route.get("success") else None,
         )
         return _attach_skill_route(llm_result, skill_route)
 

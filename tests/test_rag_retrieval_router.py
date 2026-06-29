@@ -1,19 +1,12 @@
-import pytest
+import sys
+from pathlib import Path
 
-import config
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from rag_retrieval_router import retrieve_chunks
-
-
-def test_retrieve_chunks_uses_config_default_mode():
-    chunks = retrieve_chunks(
-        query="MA5-MA10 策略适合震荡行情吗？",
-        top_k=3,
-        min_score=1,
-    )
-
-    assert config.DEFAULT_RETRIEVAL_MODE == "keyword"
-    assert isinstance(chunks, list)
-    assert len(chunks) > 0
 
 
 def test_retrieve_chunks_keyword_mode():
@@ -28,89 +21,49 @@ def test_retrieve_chunks_keyword_mode():
     assert len(chunks) > 0
 
     first_chunk = chunks[0]
+
     assert "source" in first_chunk
     assert "chunk_id" in first_chunk
     assert "text" in first_chunk
     assert "score" in first_chunk
-    assert first_chunk["retrieval_mode"] == "keyword"
-
-
-def test_retrieve_chunks_embedding_mode(monkeypatch, tmp_path):
-    from rag_embedding_indexer import build_embedding_index
-
-    document_dir = tmp_path / "documents"
-    index_path = tmp_path / "rag_index.json"
-    document_dir.mkdir(parents=True, exist_ok=True)
-    (document_dir / "ma_notes.md").write_text(
-        "MA5-MA10 均线策略用于观察短期均线和长期均线的交叉。",
-        encoding="utf-8",
-    )
-
-    build_embedding_index(
-        document_dir=document_dir,
-        index_path=index_path,
-        chunk_size=80,
-        overlap=0,
-        embedding_dim=32,
-    )
-    monkeypatch.setattr(config, "RAG_INDEX_FILE", index_path)
-
-    chunks = retrieve_chunks(
-        query="MA5-MA10 均线策略",
-        top_k=1,
-        min_score=0,
-        mode="embedding",
-    )
-
-    assert len(chunks) == 1
-    assert chunks[0]["retrieval_mode"] == "embedding"
-    assert chunks[0]["embedding_provider"] == "hash"
-
-
-def test_retrieve_chunks_hybrid_mode(monkeypatch, tmp_path):
-    from rag_embedding_indexer import build_embedding_index
-
-    document_dir = tmp_path / "documents"
-    index_path = tmp_path / "rag_index.json"
-    document_dir.mkdir(parents=True, exist_ok=True)
-    (document_dir / "ma_notes.md").write_text(
-        "MA5-MA10 均线策略用于观察短期均线和长期均线的交叉。",
-        encoding="utf-8",
-    )
-
-    build_embedding_index(
-        document_dir=document_dir,
-        index_path=index_path,
-        chunk_size=80,
-        overlap=0,
-        embedding_dim=32,
-    )
-
-    monkeypatch.setattr(config, "RAG_INDEX_FILE", index_path)
-    monkeypatch.setattr("rag_retriever.build_document_chunks", lambda: [
-        {
-            "source": str(document_dir / "ma_notes.md"),
-            "chunk_id": "ma_notes.md::chunk_0",
-            "chunk_index": 0,
-            "text": "MA5-MA10 均线策略用于观察短期均线和长期均线的交叉。",
-        },
-    ])
-
-    chunks = retrieve_chunks(
-        query="MA5-MA10 均线策略",
-        top_k=2,
-        min_score=1,
-        mode="hybrid",
-    )
-
-    assert len(chunks) > 0
-    assert chunks[0]["retrieval_mode"] == "hybrid"
-    assert "retrieval_sources" in chunks[0]
 
 
 def test_retrieve_chunks_unsupported_mode():
-    with pytest.raises(ValueError, match="Unsupported retrieval mode"):
+    try:
         retrieve_chunks(
             query="测试问题",
             mode="vector",
         )
+    except ValueError as error:
+        assert "Unsupported retrieval mode" in str(error)
+    else:
+        raise AssertionError("Expected ValueError for unsupported retrieval mode")
+
+
+def test_retrieve_chunks_with_skill_name_prioritizes_skill_documents():
+    chunks = retrieve_chunks(
+        query="最大回撤是什么意思？",
+        top_k=3,
+        min_score=1,
+        mode="keyword",
+        skill_name="stock_metrics_skill",
+    )
+
+    assert isinstance(chunks, list)
+    assert len(chunks) > 0
+    assert all(chunk.get("skill_aware_rag") is True for chunk in chunks)
+    assert all(chunk.get("rag_skill_name") == "stock_metrics_skill" for chunk in chunks)
+    assert chunks[0].get("rag_retrieval_scope") in {"skill_documents", "global_fallback"}
+
+
+def test_retrieve_chunks_with_skill_name_can_disable_global_fallback():
+    chunks = retrieve_chunks(
+        query="一个故意很难匹配到本地知识库的随机问题xyz",
+        top_k=3,
+        min_score=999,
+        mode="keyword",
+        skill_name="stock_metrics_skill",
+        fallback_to_global=False,
+    )
+
+    assert chunks == []

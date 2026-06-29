@@ -33,6 +33,7 @@ def select_tool(
     mode: str = "mock",
     use_rag: bool = False,
     rag_top_k: int = 3,
+    skill_name: str | None = None,
 ) -> dict:
     """
     统一 LLM Tool Selector 入口。
@@ -50,6 +51,8 @@ def select_tool(
             query=user_input,
             top_k=rag_top_k,
             min_score=1,
+            mode="keyword",
+            skill_name=skill_name,
         )
         retrieved_context = format_retrieved_context(retrieved_chunks)
 
@@ -74,5 +77,6 @@ def select_tool(
     result["current_file_info"] = current_file_info
     result["use_rag"] = use_rag
     result["retrieved_chunks"] = retrieved_chunks
+    result["rag_skill_name"] = skill_name
 
     return result

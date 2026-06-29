@@ -273,6 +273,15 @@ def format_rag_retrieval_trace_lines(retrieved_chunks: list[dict]) -> list[str]:
 
     lines = []
     lines.append(f"- RAG 检索模式：{', '.join(modes)}")
+
+    first_chunk = retrieved_chunks[0]
+    if first_chunk.get("skill_aware_rag"):
+        lines.append(f"- Skill-aware RAG：已启用，skill={first_chunk.get('rag_skill_name')}")
+        lines.append(f"- RAG 检索范围：{first_chunk.get('rag_retrieval_scope')}")
+        skill_documents = first_chunk.get("rag_skill_documents") or []
+        if skill_documents:
+            lines.append(f"- Skill 关联文档：{', '.join(skill_documents)}")
+
     lines.append(f"- RAG 检索片段数：{len(retrieved_chunks)}")
     lines.append("- RAG 检索片段：")
 
@@ -307,6 +316,10 @@ def format_single_retrieved_chunk_trace_line(chunk: dict) -> str:
 
     if chunk.get("embedding_status"):
         parts.append(f"embedding_status={chunk.get('embedding_status')}")
+
+    if chunk.get("skill_aware_rag"):
+        parts.append(f"rag_scope={chunk.get('rag_retrieval_scope')}")
+        parts.append(f"skill_doc_match={chunk.get('skill_document_match')}")
 
     return "  - " + " | ".join(parts)
 

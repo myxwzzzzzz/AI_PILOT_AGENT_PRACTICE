@@ -104,6 +104,8 @@ def add_llm_trace_metadata(
     trace["fallback_steps"] = fallback_steps
     trace["use_rag"] = llm_tool_call.get("use_rag", False)
     trace["retrieved_chunks"] = llm_tool_call.get("retrieved_chunks", [])
+    trace["rag_skill_name"] = llm_tool_call.get("rag_skill_name")
+    trace["skill_aware_rag"] = bool(llm_tool_call.get("rag_skill_name"))
     
 
     return route_result
@@ -133,6 +135,7 @@ def run_llm_agent_task(
     fallback_to_rule: bool = True,
     use_rag: bool = False,
     rag_top_k: int = 3,
+    skill_name: str | None = None,
 ) -> dict:
     """
     运行一次 LLM Agent 任务。
@@ -148,12 +151,16 @@ def run_llm_agent_task(
     # 0. 本地知识问答 guard：明显的知识性问题优先走 RAG QA
     # 这样可以避免 LLM 把“适合吗 / 为什么 / 是什么”误判成工具执行任务。
     if use_rag and looks_like_knowledge_question(user_input):
+        from rag_retriever import retrieve_relevant_chunks
+
         fallback_steps.append("local_intent_guard=knowledge_qa")
 
         retrieved_chunks = retrieve_chunks(
             query=user_input,
             top_k=rag_top_k,
             min_score=1,
+            mode="keyword",
+            skill_name=skill_name,
         )
 
         rag_answer = answer_with_retrieved_context(
@@ -169,6 +176,8 @@ def run_llm_agent_task(
         trace["llm_reason"] = "本地意图保护规则判断这是知识问答，因此未调用工具选择器。"
         trace["use_rag"] = True
         trace["retrieved_chunks"] = retrieved_chunks
+        trace["rag_skill_name"] = skill_name
+        trace["skill_aware_rag"] = bool(skill_name)
         trace["rag_answer_source"] = rag_answer.get("answer_source")
         trace["llm_answer_result"] = rag_answer.get("llm_answer_result")
         trace["fallback_used"] = False
@@ -183,6 +192,7 @@ def run_llm_agent_task(
         mode=selector_mode,
         use_rag=use_rag,
         rag_top_k=rag_top_k,
+        skill_name=skill_name,
     )
 
     primary_intent_type = primary_tool_call.get("intent_type", "tool_call")
@@ -198,10 +208,13 @@ def run_llm_agent_task(
         retrieved_chunks = primary_tool_call.get("retrieved_chunks", [])
 
         if not retrieved_chunks:
+            from rag_retriever import retrieve_relevant_chunks
+
             retrieved_chunks = retrieve_chunks(
                 query=user_input,
                 top_k=rag_top_k,
                 min_score=1,
+                mode="keyword",
             )
 
         rag_answer = answer_with_retrieved_context(
@@ -217,6 +230,8 @@ def run_llm_agent_task(
         trace["llm_reason"] = primary_tool_call.get("reason")
         trace["use_rag"] = True
         trace["retrieved_chunks"] = retrieved_chunks
+        trace["rag_skill_name"] = skill_name
+        trace["skill_aware_rag"] = bool(skill_name)
         trace["rag_answer_source"] = rag_answer.get("answer_source")
         trace["llm_answer_result"] = rag_answer.get("llm_answer_result")
         trace["fallback_used"] = False
