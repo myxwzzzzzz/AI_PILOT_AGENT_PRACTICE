@@ -130,6 +130,19 @@ def list_supported_workflows() -> list[dict[str, Any]]:
     return summaries
 
 
+def get_supported_workflow(workflow_name: str | None) -> dict[str, Any] | None:
+    """Return a supported workflow definition by internal workflow name."""
+
+    if not workflow_name:
+        return None
+
+    for workflow in SUPPORTED_WORKFLOWS:
+        if workflow["name"] == workflow_name:
+            return workflow
+
+    return None
+
+
 def is_workflow_request(user_input: str) -> bool:
     """
     判断用户输入是否像一个多步 workflow 请求。
@@ -237,11 +250,20 @@ def build_stock_strategy_workflow_steps(user_input: str) -> tuple[list[dict[str,
     return steps, metadata
 
 
-def plan_workflow(user_input: str, file_path: str) -> dict[str, Any]:
+def plan_workflow(
+    user_input: str,
+    file_path: str,
+    *,
+    workflow_name: str | None = None,
+) -> dict[str, Any]:
     """
     为用户输入生成 workflow 计划。
 
     注意：本函数只负责规划，不执行任何工具。
+
+    workflow_name 用于 Skill-aware Workflow Dispatch：当上层 Skill
+    Dispatcher 已经明确选择某个 workflow 时，planner 可以绕过原来的
+    文本启发式判断，但仍保留文件类型校验和步骤生成。
     """
     file_info = detect_file_type(file_path)
 
@@ -251,6 +273,8 @@ def plan_workflow(user_input: str, file_path: str) -> dict[str, Any]:
         "current_file_path": file_path,
         "current_file_type": file_info.get("file_type"),
         "current_file_type_name": file_info.get("file_type_name"),
+        "requested_workflow_name": workflow_name,
+        "planning_trigger": "skill_dispatch" if workflow_name else "heuristic",
         "matched_workflow": None,
         "planning_status": "not_started",
     }
@@ -267,18 +291,34 @@ def plan_workflow(user_input: str, file_path: str) -> dict[str, Any]:
             "trace": trace,
         }
 
-    if not is_workflow_request(user_input):
-        trace["planning_status"] = "not_workflow_request"
+    workflow = get_supported_workflow(workflow_name) if workflow_name else None
+
+    if workflow_name and workflow is None:
+        trace["planning_status"] = "unsupported_workflow"
         return {
-            "success": True,
+            "success": False,
             "is_workflow": False,
-            "workflow_name": None,
-            "reason": "当前输入不像多步 workflow 请求，建议继续走单步 router 或 LLM Tool Calling。",
+            "workflow_name": workflow_name,
+            "reason": "Skill Dispatcher 指定了 workflow，但当前 planner 尚不支持。",
+            "error": f"Unsupported workflow: {workflow_name}",
             "steps": [],
             "trace": trace,
         }
 
-    workflow = SUPPORTED_WORKFLOWS[0]
+    if workflow is None:
+        if not is_workflow_request(user_input):
+            trace["planning_status"] = "not_workflow_request"
+            return {
+                "success": True,
+                "is_workflow": False,
+                "workflow_name": None,
+                "reason": "当前输入不像多步 workflow 请求，建议继续走单步 router 或 LLM Tool Calling。",
+                "steps": [],
+                "trace": trace,
+            }
+
+        workflow = SUPPORTED_WORKFLOWS[0]
+
     trace["matched_workflow"] = workflow["name"]
 
     if file_info.get("file_type") != workflow["required_file_type"]:
@@ -302,7 +342,11 @@ def plan_workflow(user_input: str, file_path: str) -> dict[str, Any]:
         "workflow_name": workflow["name"],
         "workflow_display_name": workflow["display_name"],
         "description": workflow["description"],
-        "reason": "用户输入命中了完整/综合分析类意图，并且当前文件是股票价格数据，因此生成股票策略研究 workflow 计划。",
+        "reason": (
+            "Skill Dispatcher 已指定 workflow，因此生成股票策略研究 workflow 计划。"
+            if workflow_name
+            else "用户输入命中了完整/综合分析类意图，并且当前文件是股票价格数据，因此生成股票策略研究 workflow 计划。"
+        ),
         "steps": steps,
         "planning_metadata": planning_metadata,
         "trace": trace,

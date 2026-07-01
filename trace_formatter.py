@@ -15,6 +15,7 @@ def format_trace(route_result: dict) -> str:
         lines = []
         lines.append("\n工具调用轨迹：")
         lines.extend(format_skill_route_trace_lines(trace.get("skill_route")))
+        lines.extend(format_skill_dispatch_trace_lines(trace.get("skill_dispatch")))
         lines.append("- 路由类型：RAG 知识问答模式")
         lines.append(f"- 意图类型：{trace.get('intent_type')}")
         lines.append(f"- 用户输入：{trace.get('user_input')}")
@@ -46,6 +47,7 @@ def format_trace(route_result: dict) -> str:
         lines = []
         lines.append("\n工具调用轨迹：")
         lines.extend(format_skill_route_trace_lines(trace.get("skill_route")))
+        lines.extend(format_skill_dispatch_trace_lines(trace.get("skill_dispatch")))
         lines.append("- 路由类型：LLM Tool Calling 模式")
         lines.append(f"- 意图类型：{llm_tool_call.get('intent_type')}")
         lines.append(f"- Selector 模式：{trace.get('selector_mode') or llm_tool_call.get('selector_mode')}")
@@ -83,6 +85,7 @@ def format_trace(route_result: dict) -> str:
     lines = []
     lines.append("工具调用轨迹：")
     lines.extend(format_skill_route_trace_lines(trace.get("skill_route")))
+    lines.extend(format_skill_dispatch_trace_lines(trace.get("skill_dispatch")))
 
     user_input = trace.get("user_input")
     if user_input is not None:
@@ -170,6 +173,7 @@ def format_workflow_trace(trace: dict) -> str:
     """
     lines = ["\n工具调用轨迹："]
     lines.extend(format_skill_route_trace_lines(trace.get("skill_route")))
+    lines.extend(format_skill_dispatch_trace_lines(trace.get("skill_dispatch")))
     lines.append("- 路由类型：Workflow 多步任务编排")
     lines.append(f"- Workflow：{trace.get('workflow_display_name') or trace.get('workflow_name')}")
     lines.append(f"- 当前文件：{trace.get('current_file_path')}")
@@ -252,6 +256,39 @@ def format_skill_route_trace_lines(skill_route: dict | None) -> list[str]:
     lines.append(f"- Skill 要求文件类型：{required_file_type}")
     lines.append(f"- 当前文件类型：{current_file_type}")
     lines.append(f"- Skill 文件类型匹配：{'是' if compatible else '否'}")
+
+    return lines
+
+
+def format_skill_dispatch_trace_lines(skill_dispatch: dict | None) -> list[str]:
+    """
+    格式化 Skill Dispatch trace。
+    """
+    if not isinstance(skill_dispatch, dict):
+        return []
+
+    status = skill_dispatch.get("dispatch_status")
+    reason = skill_dispatch.get("reason") or ""
+
+    if not skill_dispatch.get("success"):
+        return [
+            f"- Skill Dispatch：未触发 ({status})",
+            f"- Skill Dispatch 原因：{reason}",
+        ]
+
+    lines = [
+        f"- Skill Dispatch：已触发 ({status})",
+        f"- Dispatch 执行路径：{skill_dispatch.get('selected_execution_path')}",
+    ]
+
+    skill_workflow_name = skill_dispatch.get("skill_workflow_name")
+    workflow_name = skill_dispatch.get("workflow_name")
+    if skill_workflow_name or workflow_name:
+        lines.append(
+            f"- Skill 绑定 Workflow：{skill_workflow_name} -> {workflow_name}"
+        )
+
+    lines.append(f"- Skill Dispatch 原因：{reason}")
 
     return lines
 

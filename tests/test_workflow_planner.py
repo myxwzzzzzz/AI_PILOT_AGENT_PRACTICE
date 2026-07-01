@@ -62,6 +62,22 @@ def test_plan_stock_strategy_workflow_parses_sort_by():
     assert all(step["arguments"]["sort_by"] == "max_drawdown" for step in scan_steps)
 
 
+
+
+def test_plan_workflow_can_be_forced_by_skill_dispatch():
+    plan = plan_workflow(
+        user_input="按最大回撤生成策略研究报告",
+        file_path=STOCK_FILE_PATH,
+        workflow_name=STOCK_STRATEGY_WORKFLOW_NAME,
+    )
+
+    assert plan["success"] is True
+    assert plan["is_workflow"] is True
+    assert plan["workflow_name"] == STOCK_STRATEGY_WORKFLOW_NAME
+    assert plan["trace"]["planning_trigger"] == "skill_dispatch"
+    assert plan["trace"]["requested_workflow_name"] == STOCK_STRATEGY_WORKFLOW_NAME
+    assert plan["planning_metadata"]["sort_by"] == "max_drawdown"
+
 def test_plan_non_workflow_request_returns_no_workflow():
     plan = plan_workflow(
         user_input="生成 MA5-MA10 回测报告",

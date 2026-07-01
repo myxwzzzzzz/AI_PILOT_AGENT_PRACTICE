@@ -1,3 +1,4 @@
+from inspect import signature
 from cli_state import AppState
 from cli_command_handler import handle_cli_command, format_current_file_info
 
@@ -10,6 +11,7 @@ from workflow_planner import is_workflow_request
 from workflow_runner import run_workflow
 from file_inspector import detect_file_type
 from skill_router import route_skill
+from skill_dispatcher import dispatch_skill
 
 
 def print_startup_message(state: AppState) -> None:
@@ -78,23 +80,82 @@ def _compact_skill_route(skill_route: dict) -> dict:
     }
 
 
-def _attach_skill_route(route_result: dict, skill_route: dict) -> dict:
+def _compact_skill_dispatch(skill_dispatch: dict | None) -> dict | None:
     """
-    将 Skill 路由信息附加到任务结果和 trace 中。
+    将 skill dispatch 结果压缩成适合放入 trace 的小结构。
+    """
+    if not isinstance(skill_dispatch, dict):
+        return None
 
-    这一步不改变原有工具或 workflow 的执行结果，只增加可观测性。
+    return {
+        "success": skill_dispatch.get("success"),
+        "dispatch_status": skill_dispatch.get("dispatch_status"),
+        "selected_execution_path": skill_dispatch.get("selected_execution_path"),
+        "should_run_workflow": skill_dispatch.get("should_run_workflow"),
+        "skill_name": skill_dispatch.get("skill_name"),
+        "skill_display_name": skill_dispatch.get("skill_display_name"),
+        "skill_workflow_name": skill_dispatch.get("skill_workflow_name"),
+        "workflow_name": skill_dispatch.get("workflow_name"),
+        "file_type_compatible": skill_dispatch.get("file_type_compatible"),
+        "reason": skill_dispatch.get("reason"),
+    }
+
+
+def _attach_skill_context(
+    route_result: dict,
+    skill_route: dict,
+    skill_dispatch: dict | None = None,
+) -> dict:
+    """
+    将 Skill 路由和 Skill Dispatch 信息附加到任务结果和 trace 中。
+
+    这一步不改变底层工具 / workflow 的执行结果，只增加可观测性。
     """
     if not isinstance(route_result, dict):
         return route_result
 
     compact_route = _compact_skill_route(skill_route)
+    compact_dispatch = _compact_skill_dispatch(skill_dispatch)
+
     route_result["skill_route"] = compact_route
+    if compact_dispatch is not None:
+        route_result["skill_dispatch"] = compact_dispatch
 
     trace = route_result.setdefault("trace", {})
     if isinstance(trace, dict):
         trace["skill_route"] = compact_route
+        if compact_dispatch is not None:
+            trace["skill_dispatch"] = compact_dispatch
 
     return route_result
+
+
+def _run_workflow_for_skill_dispatch(
+    *,
+    user_input: str,
+    file_path: str,
+    workflow_name: str | None,
+) -> dict:
+    """
+    Run workflow with an optional workflow_name when the current callable supports it.
+
+    Tests often monkeypatch main.run_workflow with a small fake that only accepts
+    user_input and file_path, so this wrapper keeps that compatibility while the
+    real workflow runner can still receive Skill Dispatcher's workflow choice.
+    """
+
+    parameters = signature(run_workflow).parameters
+    if workflow_name and "workflow_name" in parameters:
+        return run_workflow(
+            user_input=user_input,
+            file_path=file_path,
+            workflow_name=workflow_name,
+        )
+
+    return run_workflow(
+        user_input=user_input,
+        file_path=file_path,
+    )
 
 
 def run_agent_task(user_input: str, state: AppState) -> dict:
@@ -113,13 +174,26 @@ def run_agent_task(user_input: str, state: AppState) -> dict:
         user_input=user_input,
         current_file_type=current_file_type,
     )
+    skill_dispatch = dispatch_skill(
+        user_input=user_input,
+        skill_route=skill_route,
+        current_file_type=current_file_type,
+    )
+
+    if skill_dispatch.get("should_run_workflow"):
+        workflow_result = _run_workflow_for_skill_dispatch(
+            user_input=user_input,
+            file_path=state.current_file_path,
+            workflow_name=skill_dispatch.get("workflow_name"),
+        )
+        return _attach_skill_context(workflow_result, skill_route, skill_dispatch)
 
     if is_workflow_request(user_input):
         workflow_result = run_workflow(
             user_input=user_input,
             file_path=state.current_file_path,
         )
-        return _attach_skill_route(workflow_result, skill_route)
+        return _attach_skill_context(workflow_result, skill_route, skill_dispatch)
 
     if state.use_llm_mode:
         from llm_agent_runner import run_llm_agent_task
@@ -134,13 +208,13 @@ def run_agent_task(user_input: str, state: AppState) -> dict:
             rag_top_k=3,
             skill_name=skill_route.get("skill_name") if skill_route.get("success") else None,
         )
-        return _attach_skill_route(llm_result, skill_route)
+        return _attach_skill_context(llm_result, skill_route, skill_dispatch)
 
     rule_result = route_task(
         user_input=user_input,
         file_path=state.current_file_path,
     )
-    return _attach_skill_route(rule_result, skill_route)
+    return _attach_skill_context(rule_result, skill_route, skill_dispatch)
 
 
 def main() -> None:

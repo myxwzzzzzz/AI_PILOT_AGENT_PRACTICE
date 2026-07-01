@@ -146,3 +146,40 @@ def test_run_agent_task_records_no_skill_match(monkeypatch):
 
     trace_text = format_trace(result)
     assert "Skill 路由：未命中" in trace_text
+
+
+def test_run_agent_task_uses_skill_dispatcher_for_bound_workflow(monkeypatch):
+    captured = {}
+
+    def fake_detect_file_type(file_path: str):
+        return {
+            "success": True,
+            "file_type": "stock_price",
+            "file_type_name": "股票价格数据",
+            "columns": ["date", "close"],
+        }
+
+    def fake_run_workflow(user_input: str, file_path: str, workflow_name=None):
+        captured["user_input"] = user_input
+        captured["file_path"] = file_path
+        captured["workflow_name"] = workflow_name
+        return _sample_workflow_result()
+
+    monkeypatch.setattr(main, "detect_file_type", fake_detect_file_type)
+    monkeypatch.setattr(main, "run_workflow", fake_run_workflow)
+
+    state = AppState(current_file_path=STOCK_FILE_PATH)
+    result = main.run_agent_task(
+        "按最大回撤生成策略研究报告",
+        state,
+    )
+
+    assert captured["file_path"] == STOCK_FILE_PATH
+    assert captured["workflow_name"] == "stock_strategy_research"
+    assert result["skill_dispatch"]["success"] is True
+    assert result["skill_dispatch"]["dispatch_status"] == "workflow_selected"
+    assert result["trace"]["skill_dispatch"]["workflow_name"] == "stock_strategy_research"
+
+    trace_text = format_trace(result)
+    assert "Skill Dispatch：已触发" in trace_text
+    assert "stock_strategy_research_workflow -> stock_strategy_research" in trace_text

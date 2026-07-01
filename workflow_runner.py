@@ -494,6 +494,7 @@ def run_workflow(
     file_path: str,
     *,
     stop_on_failure: bool = True,
+    workflow_name: str | None = None,
 ) -> dict[str, Any]:
     """
     Plan and execute a workflow request.
@@ -501,7 +502,11 @@ def run_workflow(
     This helper keeps planner and runner connected, but still separates their
     responsibilities internally.
     """
-    plan = plan_workflow(user_input=user_input, file_path=file_path)
+    plan = plan_workflow(
+        user_input=user_input,
+        file_path=file_path,
+        workflow_name=workflow_name,
+    )
 
     if not plan.get("success") or not plan.get("is_workflow"):
         result = run_workflow_plan(
